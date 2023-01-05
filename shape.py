@@ -53,6 +53,8 @@ class Shape:
 
         self.data = self.curvature(self.data)
         
+        self.data = self.filter_outliers(self.data, 'c')
+        
         self.rotate()
         
         self.width = self.data['x'].max() - self.data['x'].min()
@@ -64,11 +66,12 @@ class Shape:
         
         self.data = self.smooth(self.raw_data, k = 3, s = 100)
         
+        
         self.area, self.cx, self.cy = self.moments(self.data)
         self.offset_x, self.offset_y = self.offsets()
 
         self.data = self.curvature(self.data)
-        
+        self.data = self.filter_outliers(self.data, 'c')
         self.rotate()
         
         self.width = self.data['x'].max() - self.data['x'].min()
@@ -93,7 +96,13 @@ class Shape:
          
         self.data[['x', 'y']] = data1[['x','y']]
           
+    def filter_outliers(self, df, col_name):
+        q_low = df[col_name].quantile(0.02)
+        q_hi  = df[col_name].quantile(0.98)
         
+        df_filtered = df[(df[col_name] < q_hi) & (df[col_name] > q_low)]
+ 
+        return df_filtered
     
     def moments(self, data):
         imageMoments = cv2.moments(np.array(data[['x', 'y']]).astype('int32'))

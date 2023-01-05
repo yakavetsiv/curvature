@@ -16,19 +16,22 @@ import PySimpleGUI as sg
 import matplotlib.pyplot as plt
 from matplotlib.ticker import NullFormatter  # useful for `logit` scale
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.ticker import MultipleLocator
 from shape import Shape
 import math
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Polygon
 import re
-from scipy import interpolate
+from scipy import interpolate, stats
 from scipy.signal import savgol_filter
+import warnings
+
 
 figure_canvas_agg = None
 img = Image.new("RGBA", (500, 500), (255, 255, 255,0))
 fig = None
 data = None
-curves = []
+
 fnames = []
 csv_filename = ""
 
@@ -70,6 +73,12 @@ def fit_scale(p, mask, an):
         uu, vv = vector_transform(an, scale, p=p) 
     return scale
     
+def dir_number(dir):
+    r = 0
+    for root, dirs, files in os.walk(dir):
+        if len(files)>0:
+            r += 1   
+    return r
 
 
 def calc_normals(data0, data1, size):
@@ -160,6 +169,43 @@ def cacl_lenght(data):
         data.loc[i+1, 'lenght'] = data.iloc[i]['lenght'] + math.dist((data.iloc[i]['x'], data.iloc[i]['y']), (data.iloc[i+1]['x'], data.iloc[i+1]['y']))
     return data  
 
+def auto_save(filename, img, figure, data):
+    
+    name = filename
+    name = re.search(r'.+(?= )', name).group(0)
+    
+    if not name:
+        sg.popup("Cancel", "Error")
+    try:    
+        img.save(name + "_img.png", "PNG")
+        figure.savefig(name +'_fig.png', dpi = 300)
+        df_sum = data.copy()
+        df_sum = df_sum.drop('dataset', axis=1)
+        with pd.ExcelWriter(name + '_data.xlsx') as writer: 
+            df_sum.to_excel(writer, sheet_name='Summary', index=True)
+            for i in range(len(data.index)):
+                df = data.iloc[i]['dataset'].copy()
+                time = data.iloc[i]['time']
+                df.to_excel(writer, sheet_name=f'{time} day', index=False)
+    except:
+        pass
+
+
+def add_curve(curves, csv_filename, day, width, height, angle, res):
+    cur = Shape(csv_filename, day, (width, height), angle, res)
+    curves.append(cur)  
+    return curves
+        
+def update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag):
+    img = Image.new("RGBA", (width, height), (255, 255, 255,0))
+    if len(curves)>0:
+        for curve in curves:
+            curve.set_res(res)
+            im = curve.make_img(w_line, colormap, c_min, c_max, auto_flag)
+            img = Image.alpha_composite(im, img)
+    return img
+    
+
 def plot_results(curves, img, canvas):
     global figure_canvas_agg
     
@@ -202,6 +248,7 @@ def plot_results(curves, img, canvas):
         res.append(curve.res)
         
         data = curve.data.reset_index()
+        
         cacl_lenght(data)
         lenght_total.append(data.iloc[-1]['lenght']*100)
         data['lenght'] = data['lenght']/data.iloc[-1]['lenght']*100
@@ -211,10 +258,7 @@ def plot_results(curves, img, canvas):
         #y_new = bspline(x_new)
         c_smooth = savgol_filter(data['c'].values, 11, 2)
         curv_mean_sm.append(c_smooth.mean())
-        
-        ax[0,1].scatter(data['lenght'], data['c'], alpha = 0.4, s = 10) 
-        ax[0,1].plot(data['lenght'], c_smooth, label = f'{curve.time} day')      
-        
+        data['c_smooth'] = c_smooth
         datasets.append(data)
     
     kin = pd.DataFrame(columns=['time', 'area', 'width', 'height', 'hists', 'width_raw', 'height_raw'])
@@ -225,13 +269,21 @@ def plot_results(curves, img, canvas):
     kin['height_raw'] = heights
     kin['curv_mean'] = curv_mean
     kin['curv_mean_sm'] = curv_mean_sm
-    kin['l_total'] = lenght_total
+    kin['len_total'] = lenght_total
     
     kin['dataset'] = datasets
-    kin = kin.sort_values(by = 'time')
+    kin = kin.sort_values(by = 'time', ignore_index=True)
     kin['width'] = kin['width_raw']-kin['width_raw'].values[0]
     kin['height'] = kin['height_raw']-kin['height_raw'].values[0]
-
+    
+    
+    for i in range(len(kin.index)):
+        data = kin.iloc[i]['dataset']
+        time = kin.iloc[i]['time']
+        
+        ax[0,1].scatter(data['lenght'], data['c'], alpha = 0.4, s = 10) 
+        ax[0,1].plot(data['lenght'], data['c_smooth'], label = f'{time} day')      
+        
     
     w, h = img.size
     ax[0,0].set_title('Curvature')
@@ -308,6 +360,7 @@ def plot_results(curves, img, canvas):
         l = []
         l_m = []
         t = []
+        datasets = [kin.iloc[0]['dataset'].copy()]
         for i in range(len(curves)-1):
             
             data0 = kin.iloc[i]['dataset'].copy()
@@ -317,8 +370,11 @@ def plot_results(curves, img, canvas):
             t.append(t1)
             
             data = calc_normals(data0, data1, (w,h))
-            
+            data = curves[0].filter_outliers(data, 'l')
+            datasets.append(data)
             ###lenght distribution alonge the perimeter
+            
+            
             l_smooth = savgol_filter(data['l'].values, 11, 2)
             kin.loc[i+1, 'l_mean'] = data['l'].mean()
             kin.loc[i+1, 'l_median'] = data['l'].median()
@@ -335,18 +391,20 @@ def plot_results(curves, img, canvas):
             r = np.corrcoef(data_sub['c'], data_sub['l'])[1,0]
             kin.loc[i+1, 'pearson'] = r
             ax[2,1].scatter(data_sub['c'], data_sub['l'], s = 10, label = f'{t0}-{t1}: P = {round(r, 2)}')
+            
         
-        ax[1,1].set_title('Curvature distribution', fontsize=14)
+        kin['dataset'] = datasets
+        
+        ax[1,1].set_title('Growth distribution', fontsize=14)
         ax[1,1].legend()
         ax[1,1].set_xlabel('Perimeter, %')
-        ax[1,1].set_ylabel('Curvature')    
+        ax[1,1].set_ylabel('Growth, px')    
         
         ax[2,1].legend()
         ax[2,1].set_title('Curvature (c<0) vs growth', fontsize=14)
         ax[2,1].set_xlabel('Curvature')
         ax[2,1].set_ylabel('Growth')
         
-
         
         v = ax[2,0].violinplot(l)
 
@@ -362,13 +420,16 @@ def plot_results(curves, img, canvas):
         #ax[2,0].scatter(x = t, y = l_m, s= 20, color = 'white')
         
         ax[2,0].set_title('Growth kinetics', fontsize=14)
+        xticks = kin['time'].values.tolist()
+        ax[2,0].xaxis.set_major_locator(MultipleLocator(1))
+        ax[2,0].set_xticklabels(xticks)
         #ax[2,0].set_xlabel('Time, days')
         ax[2,0].set_ylabel('Growth')
     
     
     
     figure.tight_layout()
-    figure.show()
+    #figure.show()
 
     figure_canvas_agg = FigureCanvasTkAgg(figure, canvas)
     figure_canvas_agg.draw()
@@ -377,9 +438,13 @@ def plot_results(curves, img, canvas):
     return figure, kin
 
 
+
+
 def main():
     global fnames
     global csv_filename
+    warnings.filterwarnings("ignore")
+    curves = []
     
     layout_files = [
                     [
@@ -430,7 +495,9 @@ def main():
                     [
                         sg.Button('Save plot'), 
                         sg.Button('Save image'),
-                        sg.Button('Save data'), 
+                        sg.Button('Save data'),
+                        sg.Text(" "),
+                        sg.Button('Auto save'),
                     ]
                     ]
 
@@ -438,6 +505,7 @@ def main():
     layout_buttons = [
                     [          
                         sg.Button('Add curve'),
+                        sg.Button('Automated analysis'),
                         sg.Text(""), 
                         sg.Button('Update settings'),
                         sg.Button('Clear'),
@@ -466,37 +534,64 @@ def main():
             #clean canvas
         
         elif event == "Update settings": 
-            if len(curves)>0:
-                img = Image.new("RGBA", (int(values["-WIDTH-"]), int(values["-HEIGHT-"])), (255, 255, 255,0))
-                
-                for curve in curves:
-                    curve.set_res(int(values["-RES-"]))
-                    im = curve.make_img(int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"])
-                    img = Image.alpha_composite(im, img)
-                
-                figure, data = plot_results(curves, img, window['-CANVAS-'].TKCanvas) 
-                window['-PLOT-'].update(visible = True)
-
+            width, height = int(values["-WIDTH-"]), int(values["-HEIGHT-"])
+            res, w_line, colormap, c_min, c_max, auto_flag = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"]
+            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag)
+            
+            figure, data = plot_results(curves, img, window['-CANVAS-'].TKCanvas) 
+            window['-PLOT-'].update(visible = True)
+            
         
         elif event == "Add curve": 
-   
-                cur = Shape(csv_filename, int(values["-DAY-"]), (int(values["-WIDTH-"]), int(values["-HEIGHT-"])), int(values["-ANGLE-"]), int(values["-RES-"]))
-                curves.append(cur)  
-                img = Image.new("RGBA", (int(values["-WIDTH-"]), int(values["-HEIGHT-"])), (255, 255, 255,0))
-                for curve in curves:
-                    #img, figure = draw_line(curve.data, curve.dim[0], curve.dim[1], 1, int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"], window['-CANVAS-'].TKCanvas)
-                    im = curve.make_img(int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"])
-                    img = Image.alpha_composite(im, img)
                 
-                
-                figure, data = plot_results(curves, img, window['-CANVAS-'].TKCanvas) 
-                window['-PLOT-'].update(visible = True)
-
+            day, width, height, angle = int(values["-DAY-"]), int(values["-WIDTH-"]), int(values["-HEIGHT-"]), int(values["-ANGLE-"])
+            res, w_line, colormap = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"]
+            c_min, c_max, auto_flag = float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"]
+            curves = add_curve(curves, csv_filename, day, width, height, angle, res)
+            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag)
             
+            figure, data = plot_results(curves, img, window['-CANVAS-'].TKCanvas) 
+            window['-PLOT-'].update(visible = True)
+
+        elif event == "Automated analysis":
+            root_dir = sg.popup_get_folder('Please enter a folder name')
+            
+            width, height, angle = int(values["-WIDTH-"]), int(values["-HEIGHT-"]), int(values["-ANGLE-"])
+            res, w_line, colormap = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"]
+            c_min, c_max, auto_flag = float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"]
+            
+            curves.clear()   
+            window['-PLOT-'].update(visible = False)
+            
+            i=0
+            n = dir_number(root_dir)
+            for root, dirs, files in os.walk(root_dir):
+                if len(files)>0:
+                    fnames = filelist(root, ".csv")
+                    curves.clear()
+                    if len(fnames)>0:
+                        try:
+                            for name in fnames:
+                                csv_filename = os.path.join(root, name)
+                                day = int(re.search(r'(?<= )([0-9]*)(?=.csv)', name).group(1))
+                                
+                                curves = add_curve(curves, csv_filename, day, width, height, angle, res)
+                            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag)
+                            figure, data = plot_results(curves, img, window['-CANVAS-'].TKCanvas) 
+                            auto_save(csv_filename, img, figure, data)
+                            i += 1
+                            progress = round(i/n*100)
+                            print(f'{root} - Done!')
+                            print(f'Progress: {progress}%')
+                        except:
+                            i += 1
+                            progress = round(i/n*100)
+                            print(f'{root} - Error')
+                            print(f'Progress: {progress}%')
+
         elif event == "Save image": 
             name = sg.popup_get_file('Please enter a file name',  save_as = True)
             try:
-                name = re.search(r'(.*)(?=.png)', name).group(1)
                 img.save(name + ".png", "PNG")
             except:
                 sg.popup("Error")
@@ -507,7 +602,7 @@ def main():
                 sg.popup("Cancel", "No filename supplied")
             else:
                 try:
-                    name = re.search(r'(.*)(?=.png)', name).group(1)
+                    
                     figure.savefig(name +'.png', dpi = 300)
                 except:
                     sg.popup("Cancel", "Error")
@@ -519,10 +614,13 @@ def main():
             if not name:
                 sg.popup("Cancel", "No filename supplied")
             try:    
-                name = re.search(r'(.*)(?=.csv)', name).group(1)
                 data.to_csv(name + '.csv',index=True)
             except:
                 pass
+            
+        elif event == "Auto save": 
+            auto_save(csv_filename, img, figure, data)
+            
         
         elif event == "-FOLDER-":   # New folder has been chosen
             fnames = filelist(values["-FOLDER-"], ".csv")
