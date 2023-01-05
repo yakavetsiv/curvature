@@ -119,7 +119,7 @@ def calc_normals(data0, data1, size):
         data.loc[i, 'u'] = pn1_x
         data.loc[i, 'v'] = pn1_y
     
-    if data['l'].mean()>150:
+    if data['l'].median()>100:
         data.loc[0, 'an'] = normal(data0[['x','y']].iloc[1].values, data0[['x','y']].iloc[0].values, data0[['x','y']].iloc[-1].values)
         data.loc[0, 'l'] = fit_scale(data0[['x','y']].iloc[0].values, mask_2d, data[['an']].iloc[0].values)
         pn1_x, pn1_y = vector_transform(data[['an']].iloc[0].values, data[['l']].iloc[0].values, data[['x','y']].iloc[0].values)
