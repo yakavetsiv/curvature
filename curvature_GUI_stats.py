@@ -118,7 +118,33 @@ def calc_normals(data0, data1, size):
         pn1_x, pn1_y = vector_transform(data[['an']].iloc[i].values, data[['l']].iloc[i].values, data[['x','y']].iloc[i].values)
         data.loc[i, 'u'] = pn1_x
         data.loc[i, 'v'] = pn1_y
-                
+    
+    if data['l'].mean()>150:
+        data.loc[0, 'an'] = normal(data0[['x','y']].iloc[1].values, data0[['x','y']].iloc[0].values, data0[['x','y']].iloc[-1].values)
+        data.loc[0, 'l'] = fit_scale(data0[['x','y']].iloc[0].values, mask_2d, data[['an']].iloc[0].values)
+        pn1_x, pn1_y = vector_transform(data[['an']].iloc[0].values, data[['l']].iloc[0].values, data[['x','y']].iloc[0].values)
+        data.loc[0, 'u'] = pn1_x
+        data.loc[0, 'v'] = pn1_y
+        
+        data.loc[len(data)-1, 'an'] = normal(data0[['x','y']].iloc[0].values, data0[['x','y']].iloc[-1].values, data0[['x','y']].iloc[-2].values)
+        data.loc[len(data)-1, 'l'] = fit_scale(data0[['x','y']].iloc[-1].values, mask_2d, data[['an']].iloc[-1].values)
+        pn1_x, pn1_y = vector_transform(data[['an']].iloc[-1].values, data[['l']].iloc[-1].values, data[['x','y']].iloc[-1].values)
+        data.loc[len(data)-1, 'u'] = pn1_x
+        data.loc[len(data)-1, 'v'] = pn1_y
+        
+        
+        
+        for i in range(1, len(data)-1):
+            data.loc[i, 'an'] = normal(data0[['x','y']].iloc[i+1].values, data0[['x','y']].iloc[i].values, data0[['x','y']].iloc[i-1].values)
+            data.loc[i, 'l'] = fit_scale(data0[['x','y']].iloc[i].values, mask_2d, data[['an']].iloc[i].values)
+            pn1_x, pn1_y = vector_transform(data[['an']].iloc[i].values, data[['l']].iloc[i].values, data[['x','y']].iloc[i].values)
+            data.loc[i, 'u'] = pn1_x
+            data.loc[i, 'v'] = pn1_y
+        
+        
+        
+
+            
     return data
 
 def vector_transform(an, l, p = [0,0]):
@@ -353,7 +379,7 @@ def plot_results(curves, img, canvas):
         ax[1,0].set_xlim(0,w)
         ax[1,0].set_ylim(0,h)
     
-        ax[1,0].legend()
+        
         ax[1,0].set_title('Growth rate', fontsize=14)
         ax[1,0].set_ylabel('y')
         ax[1,0].set_xlabel('x')
