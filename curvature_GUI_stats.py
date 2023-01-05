@@ -232,7 +232,8 @@ def plot_results(curves, img, canvas):
     lenght_total = []
     res = []
     curv_mean_sm = []
-       
+    circ = []
+    sol = []
     for curve in curves:
         
         
@@ -253,6 +254,8 @@ def plot_results(curves, img, canvas):
         lenght_total.append(data.iloc[-1]['lenght']*100)
         data['lenght'] = data['lenght']/data.iloc[-1]['lenght']*100
         
+        circ.append(curve.circ)
+        sol.append(curve.solidity)
         #x_new = np.linspace(0, 100, curve.res)
         #bspline = interpolate.make_interp_spline(data['lenght'].values, data['c'].values)
         #y_new = bspline(x_new)
@@ -261,7 +264,7 @@ def plot_results(curves, img, canvas):
         data['c_smooth'] = c_smooth
         datasets.append(data)
     
-    kin = pd.DataFrame(columns=['time', 'area', 'width', 'height', 'hists', 'width_raw', 'height_raw'])
+    kin = pd.DataFrame(columns=['time', 'area', 'width', 'height', 'width_raw', 'height_raw', 'curv_mean', 'curv_mean_sm', 'len_total', 'circ', 'sol'])
     kin['time'] = times
     kin['res'] = res
     kin['area'] = areas
@@ -270,6 +273,9 @@ def plot_results(curves, img, canvas):
     kin['curv_mean'] = curv_mean
     kin['curv_mean_sm'] = curv_mean_sm
     kin['len_total'] = lenght_total
+    kin['circ'] = circ
+    kin['sol'] = sol
+    
     
     kin['dataset'] = datasets
     kin = kin.sort_values(by = 'time', ignore_index=True)
@@ -360,36 +366,43 @@ def plot_results(curves, img, canvas):
         l = []
         l_m = []
         t = []
+        
         datasets = [kin.iloc[0]['dataset'].copy()]
         for i in range(len(curves)-1):
-            
+            #loading the datasets and time-label
             data0 = kin.iloc[i]['dataset'].copy()
             data1 = kin.iloc[i+1]['dataset'].copy()
             t0 = int(kin.iloc[i]['time'])
             t1 = int(kin.iloc[i+1]['time'])
             t.append(t1)
             
+            ###lenght distribution alonge the perimeter
             data = calc_normals(data0, data1, (w,h))
             data = curves[0].filter_outliers(data, 'l')
             datasets.append(data)
-            ###lenght distribution alonge the perimeter
             
-            
+            #smoothing the growth data
             l_smooth = savgol_filter(data['l'].values, 11, 2)
+            data['l_sm'] = l_smooth
+            
+            #calculation of growth stats
             kin.loc[i+1, 'l_mean'] = data['l'].mean()
             kin.loc[i+1, 'l_median'] = data['l'].median()
             kin.loc[i+1, 'l_max'] = data['l'].max()
             
+            #plotting the data + smooth line
             ax[1,1].scatter(data['lenght'], data['l'], alpha = 0.4, s = 10) 
             ax[1,1].plot(data['lenght'], l_smooth, label = f'{t0}-{t1}')  
             l.append(data['l'].values)
             l_m.append(data['l'].values.mean())
             
             
-
+            #filtering point with the negative curvature
             data_sub = data[data['c'] <= 0]
+            #caclulation of pearson correlation coefficientbetween growth and curvature (c<0)
             r = np.corrcoef(data_sub['c'], data_sub['l'])[1,0]
             kin.loc[i+1, 'pearson'] = r
+            #plotting the growth vs curvature
             ax[2,1].scatter(data_sub['c'], data_sub['l'], s = 10, label = f'{t0}-{t1}: P = {round(r, 2)}')
             
         
@@ -424,7 +437,7 @@ def plot_results(curves, img, canvas):
         ax[2,0].xaxis.set_major_locator(MultipleLocator(1))
         ax[2,0].set_xticklabels(xticks)
         #ax[2,0].set_xlabel('Time, days')
-        ax[2,0].set_ylabel('Growth')
+        ax[2,0].set_ylabel('Growth, px')
     
     
     

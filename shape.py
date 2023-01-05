@@ -48,9 +48,12 @@ class Shape:
         self.data = self.smooth(self.raw_data, k = 3, s = 100)
         self.angle = np.deg2rad(angle)
         
-        self.area, self.cx, self.cy = self.moments(self.data)
+        self.area, self.cx, self.cy, self.solidity = self.moments(self.data)
+        
         self.offset_x, self.offset_y = self.offsets()
-
+        self.perimeter = self.calc_perimeter()
+        self.circ = (4*math.pi*self.area)/(self.perimeter*self.perimeter)
+        
         self.data = self.curvature(self.data)
         
         self.data = self.filter_outliers(self.data, 'c')
@@ -67,16 +70,26 @@ class Shape:
         self.data = self.smooth(self.raw_data, k = 3, s = 100)
         
         
-        self.area, self.cx, self.cy = self.moments(self.data)
+        self.area, self.cx, self.cy, self.solidity = self.moments(self.data)
         self.offset_x, self.offset_y = self.offsets()
-
+        self.perimeter = self.calc_perimeter()
+        
+        self.circ = (4*math.pi*self.area)/(self.perimeter*self.perimeter)
         self.data = self.curvature(self.data)
         self.data = self.filter_outliers(self.data, 'c')
         self.rotate()
         
         self.width = self.data['x'].max() - self.data['x'].min()
         self.height = self.data['y'].max() - self.data['y'].min()
-        
+    
+    def calc_perimeter(self):
+        data = self.data.copy()
+        data['lenght'] = 0
+        data.loc[0, 'lenght'] = 0
+        for i in range(len(data.index)-1):       
+            data.loc[i+1, 'lenght'] = data.iloc[i]['lenght'] + math.dist((data.iloc[i]['x'], data.iloc[i]['y']), (data.iloc[i+1]['x'], data.iloc[i+1]['y']))
+        return data.iloc[-1]['lenght'] 
+    
         
     def _load_data(self, name):
         df = pd.DataFrame(columns=['x', 'y', 'c'])
@@ -110,6 +123,16 @@ class Shape:
         cy = int(imageMoments['m01']/imageMoments['m00'])
         area = imageMoments['m00']
         
+       
+        area_c = cv2.contourArea(np.array(data[['x', 'y']]).astype('int32'))
+       
+        
+        hull = cv2.convexHull(np.array(data[['x', 'y']]).astype('int32'))
+        hullArea = cv2.contourArea(hull)
+        solidity = area_c / float(hullArea)
+       
+        
+        
         mu_20 = imageMoments['m20']/imageMoments['m00'] - cx**2
         mu_02 = imageMoments['m20']/imageMoments['m00'] - cy**2
         mu_11 = imageMoments['m11']/imageMoments['m00'] - cx*cy
@@ -124,7 +147,7 @@ class Shape:
         if angle > 90:
             angle = angle - 180
         #print(angle)
-        return area, cx, cy
+        return area, cx, cy, solidity
     
 
     def offsets(self):
