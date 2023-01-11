@@ -118,30 +118,7 @@ def calc_normals(data0, data1, size):
         pn1_x, pn1_y = vector_transform(data[['an']].iloc[i].values, data[['l']].iloc[i].values, data[['x','y']].iloc[i].values)
         data.loc[i, 'u'] = pn1_x
         data.loc[i, 'v'] = pn1_y
-    
-    if data['l'].median()>100:
-        data.loc[0, 'an'] = normal(data0[['x','y']].iloc[1].values, data0[['x','y']].iloc[0].values, data0[['x','y']].iloc[-1].values)
-        data.loc[0, 'l'] = fit_scale(data0[['x','y']].iloc[0].values, mask_2d, data[['an']].iloc[0].values)
-        pn1_x, pn1_y = vector_transform(data[['an']].iloc[0].values, data[['l']].iloc[0].values, data[['x','y']].iloc[0].values)
-        data.loc[0, 'u'] = pn1_x
-        data.loc[0, 'v'] = pn1_y
-        
-        data.loc[len(data)-1, 'an'] = normal(data0[['x','y']].iloc[0].values, data0[['x','y']].iloc[-1].values, data0[['x','y']].iloc[-2].values)
-        data.loc[len(data)-1, 'l'] = fit_scale(data0[['x','y']].iloc[-1].values, mask_2d, data[['an']].iloc[-1].values)
-        pn1_x, pn1_y = vector_transform(data[['an']].iloc[-1].values, data[['l']].iloc[-1].values, data[['x','y']].iloc[-1].values)
-        data.loc[len(data)-1, 'u'] = pn1_x
-        data.loc[len(data)-1, 'v'] = pn1_y
-        
-        
-        
-        for i in range(1, len(data)-1):
-            data.loc[i, 'an'] = normal(data0[['x','y']].iloc[i+1].values, data0[['x','y']].iloc[i].values, data0[['x','y']].iloc[i-1].values)
-            data.loc[i, 'l'] = fit_scale(data0[['x','y']].iloc[i].values, mask_2d, data[['an']].iloc[i].values)
-            pn1_x, pn1_y = vector_transform(data[['an']].iloc[i].values, data[['l']].iloc[i].values, data[['x','y']].iloc[i].values)
-            data.loc[i, 'u'] = pn1_x
-            data.loc[i, 'v'] = pn1_y
-        
-        
+   
         
 
             
@@ -222,11 +199,12 @@ def add_curve(curves, csv_filename, day, width, height, angle, res):
     curves.append(cur)  
     return curves
         
-def update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag):
+def update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, res_flag = False):
     img = Image.new("RGBA", (width, height), (255, 255, 255,0))
     if len(curves)>0:
         for curve in curves:
-            curve.set_res(res)
+            if res_flag:
+                curve.set_res(res)
             im = curve.make_img(w_line, colormap, c_min, c_max, auto_flag)
             img = Image.alpha_composite(im, img)
     return img
@@ -547,7 +525,8 @@ def main():
                         sg.Button('Automated analysis'),
                         sg.Text(""), 
                         sg.Button('Update settings'),
-                        sg.Button('Clear'),
+                        sg.Button('Clear all'),
+                        sg.Button('Clear last'),
                         sg.Button('Quit')
                     ]]
                     
@@ -566,16 +545,32 @@ def main():
             window.close()
             break
         
-        elif event == "Clear":
+        elif event == "Clear all":
             curves.clear()   
             window['-PLOT-'].update(visible = False)
             
+            #clean canvas
+            
+        elif event == "Clear last":
+            day, width, height, angle = int(values["-DAY-"]), int(values["-WIDTH-"]), int(values["-HEIGHT-"]), int(values["-ANGLE-"])
+            res, w_line, colormap = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"]
+            c_min, c_max, auto_flag = float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"]
+            
+            if len(curves)>1:
+                curves.pop()    
+            if len(curves)>0:
+                img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, False)
+                figure, data = plot_results(curves, img, window['-CANVAS-'].TKCanvas) 
+                window['-PLOT-'].update(visible = True)
+            else:
+                window['-PLOT-'].update(visible = False)
+                
             #clean canvas
         
         elif event == "Update settings": 
             width, height = int(values["-WIDTH-"]), int(values["-HEIGHT-"])
             res, w_line, colormap, c_min, c_max, auto_flag = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"]
-            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag)
+            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, True)
             
             figure, data = plot_results(curves, img, window['-CANVAS-'].TKCanvas) 
             window['-PLOT-'].update(visible = True)
@@ -587,7 +582,7 @@ def main():
             res, w_line, colormap = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"]
             c_min, c_max, auto_flag = float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"]
             curves = add_curve(curves, csv_filename, day, width, height, angle, res)
-            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag)
+            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, False)
             
             figure, data = plot_results(curves, img, window['-CANVAS-'].TKCanvas) 
             window['-PLOT-'].update(visible = True)
