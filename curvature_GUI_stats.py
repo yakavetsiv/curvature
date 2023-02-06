@@ -25,7 +25,7 @@ import re
 from scipy import interpolate, stats
 from scipy.signal import savgol_filter
 import warnings
-
+from datetime import date
 
 figure_canvas_agg = None
 img = Image.new("RGBA", (500, 500), (255, 255, 255,0))
@@ -190,6 +190,7 @@ def auto_save(filename, img, figure, data):
                 df = data.iloc[i]['dataset'].copy()
                 time = data.iloc[i]['time']
                 df.to_excel(writer, sheet_name=f'{time} day', index=False)
+        sg.popup("Cancel", "Report files were saved")
     except:
         pass
 
@@ -208,25 +209,9 @@ def update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_
             im = curve.make_img(w_line, colormap, c_min, c_max, auto_flag)
             img = Image.alpha_composite(im, img)
     return img
-    
+  
 
-def plot_results(curves, img, canvas):
-    global figure_canvas_agg
-    
-    if figure_canvas_agg:
-        figure_canvas_agg.get_tk_widget().forget()
-        plt.close('all')
-   
-    parameters = {'xtick.labelsize': 12,
-              'ytick.labelsize': 12,
-              'font.family':'sans-serif',
-              'font.sans-serif':['Arial'],
-                 'font.size': 12}
-    plt.rcParams.update(parameters)
-    
-
-    figure, ax = plt.subplots(3, 2, figsize = (8,12))
-
+def create_dataset(curves):
     times = []
     areas = []
     widths = []
@@ -282,6 +267,35 @@ def plot_results(curves, img, canvas):
     
     
     kin['dataset'] = datasets
+    
+    return kin
+    
+
+
+
+
+def plot_results(kin, img, canvas, curve):
+    global figure_canvas_agg
+    
+    if figure_canvas_agg:
+        figure_canvas_agg.get_tk_widget().forget()
+        plt.close('all')
+   
+    parameters = {'xtick.labelsize': 12,
+              'ytick.labelsize': 12,
+              'font.family':'sans-serif',
+              'font.sans-serif':['Arial'],
+                 'font.size': 12}
+    plt.rcParams.update(parameters)
+    
+
+    figure, ax = plt.subplots(3, 2, figsize = (8,12))
+
+    
+    
+    
+    
+    
     kin = kin.sort_values(by = 'time', ignore_index=True)
     kin['width'] = kin['width_raw']-kin['width_raw'].values[0]
     kin['height'] = kin['height_raw']-kin['height_raw'].values[0]
@@ -313,10 +327,10 @@ def plot_results(curves, img, canvas):
     ax[0,1].set_xlabel('Perimeter, %')
     ax[0,1].set_ylabel('Curvature')
     
-    if len(curves)>1:
+    if len(kin.index)>1:
         time0 = kin.iloc[0]['time']
         time1 = kin.iloc[-1]['time']
-        COL = curves[0].COL
+        COL = curve.COL
         
         data0 = kin.iloc[0]['dataset'].copy()
         data1 = kin.iloc[-1]['dataset'].copy()
@@ -372,7 +386,7 @@ def plot_results(curves, img, canvas):
         t = []
         
         datasets = [kin.iloc[0]['dataset'].copy()]
-        for i in range(len(curves)-1):
+        for i in range(len(kin.index)-1):
             #loading the datasets and time-label
             data0 = kin.iloc[i]['dataset'].copy()
             data1 = kin.iloc[i+1]['dataset'].copy()
@@ -382,7 +396,7 @@ def plot_results(curves, img, canvas):
             
             ###lenght distribution alonge the perimeter
             data = calc_normals(data0, data1, (w,h))
-            data = curves[0].filter_outliers(data, 'l')
+            data = curve.filter_outliers(data, 'l')
             datasets.append(data)
             
             #smoothing the growth data
@@ -455,7 +469,74 @@ def plot_results(curves, img, canvas):
     return figure, kin
 
 
+def plot_feature(data0, feature, Shapes, label, filename):
+    
+    fig, ax = plt.subplots(1, len(Shapes), figsize = (12,4))
+    
+    parameters = {'xtick.labelsize': 12,
+                  'ytick.labelsize': 12,
+                  'font.family':'sans-serif',
+                  'font.sans-serif':['Arial'],
+                     'font.size': 12}
+    plt.rcParams.update(parameters)
+    
+    for i, shape in enumerate(Shapes):
+        data = data0[data0['Shape'] == shape]
+        
+        data.boxplot(column=feature, by=['time'], ax=ax[i], grid = False, layout= (3,5))
+        ax[i].set_ylabel(feature)
+        ax[i].set_title(shape)
+    
+    for i in range(4):
+        
+        if label == 'MCF-7':
+            if feature == "curv_mean":
+                ax[i].set_ylim(-0.012, 0.0015)
+            if feature == "pearson":
+                ax[i].set_ylim(-0.5, 0.5)
+            if feature == "circ":
+                ax[i].set_ylim(0.4, 1)
+            if feature == "sol":
+                ax[i].set_ylim(0.7, 1.05)
+            if feature == "l_mean":
+                ax[i].set_ylim(0, 85)
+            if feature == "l_median":
+                ax[i].set_ylim(0, 85)
+            if feature == "len_total":
+                ax[i].set_ylim(50000, 330000)
+                
+        if label == 'Patient':
+            if feature == "curv_mean":
+                ax[i].set_ylim(-0.007, 0.0015)
+            if feature == "pearson":
+                ax[i].set_ylim(-1, 1)
+            if feature == "circ":
+                ax[i].set_ylim(0, 1.05)
+            if feature == "sol":
+                ax[i].set_ylim(0.5, 1.05)
+            if feature == "l_mean":
+                ax[i].set_ylim(0, 85)
+            if feature == "l_median":
+                ax[i].set_ylim(0, 85)
+            if feature == "len_total":
+                ax[i].set_ylim(00, 330000)
+        
+    fig.suptitle(f'{feature}_{label}', fontsize=16)
 
+    fig.tight_layout()
+    
+    root, name = os.path.split(filename)
+    
+    name = name.replace(".xlsx", f"_{feature}_{label}.png")
+    
+    today = str(date.today())
+    filename = f'{root}/{today}/{label}/{name}'
+    if not os.path.exists(f'{root}/{today}/{label}'):
+        os.makedirs(f'{root}/{today}/{label}')
+    
+    fig.savefig(filename)
+
+    
 
 def main():
     global fnames
@@ -515,6 +596,7 @@ def main():
                         sg.Button('Save data'),
                         sg.Text(" "),
                         sg.Button('Auto save'),
+                        sg.Button('Remove days'),
                     ]
                     ]
 
@@ -523,7 +605,10 @@ def main():
                     [          
                         sg.Button('Add curve'),
                         sg.Button('Automated analysis'),
-                        sg.Text(""), 
+                        sg.Text(""),
+                        sg.Button('Summary report'),
+                    ],
+                    [
                         sg.Button('Update settings'),
                         sg.Button('Clear all'),
                         sg.Button('Clear last'),
@@ -560,7 +645,8 @@ def main():
                 curves.pop()    
             if len(curves)>0:
                 img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, False)
-                figure, data = plot_results(curves, img, window['-CANVAS-'].TKCanvas) 
+                kin = create_dataset(curves)
+                figure, data = plot_results(kin, img, window['-CANVAS-'].TKCanvas, curves[0]) 
                 window['-PLOT-'].update(visible = True)
             else:
                 window['-PLOT-'].update(visible = False)
@@ -572,7 +658,8 @@ def main():
             res, w_line, colormap, c_min, c_max, auto_flag = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"]
             img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, True)
             
-            figure, data = plot_results(curves, img, window['-CANVAS-'].TKCanvas) 
+            kin = create_dataset(curves)
+            figure, data = plot_results(kin, img, window['-CANVAS-'].TKCanvas, curves[0]) 
             window['-PLOT-'].update(visible = True)
             
         
@@ -584,7 +671,8 @@ def main():
             curves = add_curve(curves, csv_filename, day, width, height, angle, res)
             img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, False)
             
-            figure, data = plot_results(curves, img, window['-CANVAS-'].TKCanvas) 
+            kin = create_dataset(curves)
+            figure, data = plot_results(kin, img, window['-CANVAS-'].TKCanvas, curves[0]) 
             window['-PLOT-'].update(visible = True)
 
         elif event == "Automated analysis":
@@ -611,7 +699,9 @@ def main():
                                 
                                 curves = add_curve(curves, csv_filename, day, width, height, angle, res)
                             img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag)
-                            figure, data = plot_results(curves, img, window['-CANVAS-'].TKCanvas) 
+                            kin = create_dataset(curves)
+                            figure, data = plot_results(kin, img, window['-CANVAS-'].TKCanvas, curves[0])
+                            
                             auto_save(csv_filename, img, figure, data)
                             i += 1
                             progress = round(i/n*100)
@@ -668,7 +758,46 @@ def main():
                 window['-DAY-'].update(day)
             except:
                 pass
+        elif event == "Summary report":
+            filename = sg.popup_get_file('Open file', file_types = (('Summary file','.xlsx'), ))
+            
+            Shapes = ["Circ", "LR", "MR", "U"]
+            Features = ["curv_mean", "pearson","circ", "sol", "l_mean", "l_median", "len_total"]            
+            
+            sheet_names = ['MCF7', 'Patient']
+            
+            try:
+                for sheet_name in sheet_names:
+                    sum_df =  pd.read_excel(filename, sheet_name=sheet_name)
+                    
+                    for feature in Features:
+                        plot_feature(sum_df, feature, Shapes, sheet_name, filename)
+                    sg.popup("Cancel", f'Report files for {sheet_name} were saved')
+            except:
+                sg.popup("Cancel", 'Please check the names of sheets')
+            
         
+        elif event == "Remove days":
+            filename = sg.popup_get_file('Open file', file_types = (('Report file *_data.xlsx','.xlsx'), ))
+            kin = pd.read_excel(filename, 0)
+            kin['dataset'] = 0
+            for i in range(len(kin.index)):
+                kin['dataset'].iloc[i] = pd.read_excel(filename, i+1)
+            
+            day_to_remove = 3
+            
+            i = kin[(kin['time'] == day_to_remove)].index
+            kin = kin.drop(i)
+            
+            img = Image.new("RGBA", (width, height), (255, 255, 255,0))
+            
+            figure, data = plot_results(kin, img, window['-CANVAS-'].TKCanvas, curves[0])
+            window['-PLOT-'].update(visible = True)
+            filename = filename.replace("_data.xlsx", "_rem 3.csv" )
+
+            auto_save(filename, img, figure, data)
+            
+            
             
         
             
