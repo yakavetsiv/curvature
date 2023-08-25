@@ -1,4 +1,4 @@
-# curvature
+# Curvature analysis script
 
 Image processing script for calculation of local curvature and growth of tumoroids based on their shape. 
 - [Installation](#installation)
