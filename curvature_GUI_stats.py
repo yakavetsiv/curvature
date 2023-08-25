@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import NullFormatter  # useful for `logit` scale
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.ticker import MultipleLocator
+from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 from shape import Shape
 import math
 from matplotlib.collections import PatchCollection
@@ -35,7 +36,8 @@ data = None
 fnames = []
 csv_filename = ""
 
-colors = [(31,119,180), (255,127,14), (44,180,44), (214,39,40)]
+#colors = [(20,42,64), (36,77,111), (56,116,167), (84, 173, 240)]
+colors = [(20,42,64), (84, 173, 240)]
 
 
 class MplColorHelper:
@@ -44,12 +46,16 @@ class MplColorHelper:
     self.cmap = plt.get_cmap(cmap_name)
     self.norm = mpl.colors.Normalize(vmin=start_val, vmax=stop_val)
     self.scalarMap = cm.ScalarMappable(norm=self.norm, cmap=self.cmap)
+    
+    
+    
 
   def get_rgb(self, val):
     return self.scalarMap.to_rgba(val)
 
   def color(self, val):
     return self.cmap(self.norm(val))
+
 
 def filelist(folder, ext):
     try:
@@ -88,44 +94,83 @@ def dir_number(dir):
 
 
 def calc_normals(data0, data1, size, inv_flag = False):
-    
     img = Image.new("1", size, color = 0)
-
     draw = ImageDraw.Draw(img)
-    pol1 = [(e[0], e[1]) for e in data1[['x','y']].to_numpy().reshape(len(data1), 2).tolist()]
-    draw.polygon(pol1, fill = 1) 
-    mask_2d = np.asarray(img)
     
+    if inv_flag:
+        
+        pol1 = [(e[0], e[1]) for e in data1[['x','y']].to_numpy().reshape(len(data1), 2).tolist()]
+        pol0 = [(e[0], e[1]) for e in data0[['x','y']].to_numpy().reshape(len(data0), 2).tolist()]
+        draw.polygon(pol1, fill = 1, outline =1) 
+        draw.polygon(pol0, fill = 0, outline =0)
+        img.show()
+        mask_2d = np.asarray(img)
+        
     
-    
-    
-    data = data0.copy()
-    data['an'] = 0
-    data['l'] = 0
-    data['u'] = 0
-    data['v'] = 0
-    
-    data.loc[0, 'an'] = normal(data0[['x','y']].iloc[-1].values, data0[['x','y']].iloc[0].values, data0[['x','y']].iloc[1].values)
-    data.loc[0, 'l'] = fit_scale(data0[['x','y']].iloc[0].values, mask_2d, data[['an']].iloc[0].values, inv_flag)
-    pn1_x, pn1_y = vector_transform(data[['an']].iloc[0].values, data[['l']].iloc[0].values, data[['x','y']].iloc[0].values)
-    data.loc[0, 'u'] = pn1_x
-    data.loc[0, 'v'] = pn1_y
-    
-    data.loc[len(data)-1, 'an'] = normal(data0[['x','y']].iloc[-2].values, data0[['x','y']].iloc[-1].values, data0[['x','y']].iloc[0].values)
-    data.loc[len(data)-1, 'l'] = fit_scale(data0[['x','y']].iloc[-1].values, mask_2d, data[['an']].iloc[-1].values,inv_flag)
-    pn1_x, pn1_y = vector_transform(data[['an']].iloc[-1].values, data[['l']].iloc[-1].values, data[['x','y']].iloc[-1].values)
-    data.loc[len(data)-1, 'u'] = pn1_x
-    data.loc[len(data)-1, 'v'] = pn1_y
-    
-    
-    
-    for i in range(1, len(data)-1):
-        data.loc[i, 'an'] = normal(data0[['x','y']].iloc[i-1].values, data0[['x','y']].iloc[i].values, data0[['x','y']].iloc[i+1].values)
-        data.loc[i, 'l'] = fit_scale(data0[['x','y']].iloc[i].values, mask_2d, data[['an']].iloc[i].values,inv_flag)
-        pn1_x, pn1_y = vector_transform(data[['an']].iloc[i].values, data[['l']].iloc[i].values, data[['x','y']].iloc[i].values)
-            
-        data.loc[i, 'u'] = pn1_x
+        data = data1.copy()
+        data['an'] = 0
+        data['l'] = 0
+        data['u'] = 0
+        data['v'] = 0
+        
+        data.loc[0, 'an'] = normal(data1[['x','y']].iloc[-1].values, data1[['x','y']].iloc[0].values, data1[['x','y']].iloc[1].values)
+        data.loc[0, 'l'] = fit_scale(data1[['x','y']].iloc[0].values, mask_2d, data[['an']].iloc[0].values, inv_flag)
+        pn1_x, pn1_y = vector_transform(data[['an']].iloc[0].values, data[['l']].iloc[0].values, data[['x','y']].iloc[0].values)
+        data.loc[0, 'u'] = pn1_x
+        data.loc[0, 'v'] = pn1_y
+        
+        data.loc[len(data)-1, 'an'] = normal(data1[['x','y']].iloc[-2].values, data1[['x','y']].iloc[-1].values, data1[['x','y']].iloc[0].values)
+        data.loc[len(data)-1, 'l'] = fit_scale(data1[['x','y']].iloc[-1].values, mask_2d, data[['an']].iloc[-1].values,inv_flag)
+        pn1_x, pn1_y = vector_transform(data[['an']].iloc[-1].values, data[['l']].iloc[-1].values, data[['x','y']].iloc[-1].values)
+        data.loc[len(data)-1, 'u'] = pn1_x
+        data.loc[len(data)-1, 'v'] = pn1_y
+        
+        
+        
+        for i in range(1, len(data)-1):
+            data.loc[i, 'an'] = normal(data1[['x','y']].iloc[i-1].values, data1[['x','y']].iloc[i].values, data1[['x','y']].iloc[i+1].values)
+            data.loc[i, 'l'] = fit_scale(data1[['x','y']].iloc[i].values, mask_2d, data[['an']].iloc[i].values,inv_flag)
+            pn1_x, pn1_y = vector_transform(data[['an']].iloc[i].values, data[['l']].iloc[i].values, data[['x','y']].iloc[i].values)
+        
+            data.loc[i, 'u'] = pn1_x
         data.loc[i, 'v'] = pn1_y
+        
+    else:
+
+        pol1 = [(e[0], e[1]) for e in data1[['x','y']].to_numpy().reshape(len(data1), 2).tolist()]
+        draw.polygon(pol1, fill = 1) 
+        mask_2d = np.asarray(img)
+        
+        
+        
+        
+        data = data0.copy()
+        data['an'] = 0
+        data['l'] = 0
+        data['u'] = 0
+        data['v'] = 0
+        
+        data.loc[0, 'an'] = normal(data0[['x','y']].iloc[-1].values, data0[['x','y']].iloc[0].values, data0[['x','y']].iloc[1].values)
+        data.loc[0, 'l'] = fit_scale(data0[['x','y']].iloc[0].values, mask_2d, data[['an']].iloc[0].values, inv_flag)
+        pn1_x, pn1_y = vector_transform(data[['an']].iloc[0].values, data[['l']].iloc[0].values, data[['x','y']].iloc[0].values)
+        data.loc[0, 'u'] = pn1_x
+        data.loc[0, 'v'] = pn1_y
+        
+        data.loc[len(data)-1, 'an'] = normal(data0[['x','y']].iloc[-2].values, data0[['x','y']].iloc[-1].values, data0[['x','y']].iloc[0].values)
+        data.loc[len(data)-1, 'l'] = fit_scale(data0[['x','y']].iloc[-1].values, mask_2d, data[['an']].iloc[-1].values,inv_flag)
+        pn1_x, pn1_y = vector_transform(data[['an']].iloc[-1].values, data[['l']].iloc[-1].values, data[['x','y']].iloc[-1].values)
+        data.loc[len(data)-1, 'u'] = pn1_x
+        data.loc[len(data)-1, 'v'] = pn1_y
+        
+        
+        
+        for i in range(1, len(data)-1):
+            data.loc[i, 'an'] = normal(data0[['x','y']].iloc[i-1].values, data0[['x','y']].iloc[i].values, data0[['x','y']].iloc[i+1].values)
+            data.loc[i, 'l'] = fit_scale(data0[['x','y']].iloc[i].values, mask_2d, data[['an']].iloc[i].values,inv_flag)
+            pn1_x, pn1_y = vector_transform(data[['an']].iloc[i].values, data[['l']].iloc[i].values, data[['x','y']].iloc[i].values)
+                
+            data.loc[i, 'u'] = pn1_x
+            data.loc[i, 'v'] = pn1_y
    
         
 
@@ -159,9 +204,11 @@ def normal(p0, p1, p2):
     
     #90degree rotation of tangent vector
     #u, v = p1[0]-dy, p1[1]+dx
+    an = 0
     
     if ((-dy)> 0) & (dx >0):
         an = math.acos(dx/length)
+        
     if ((-dy)< 0) & (dx >0):
         an = 2*math.pi - math.acos(dx/length)
         
@@ -203,18 +250,20 @@ def auto_save(filename, img, figure, data):
         pass
 
 
-def add_curve(curves, csv_filename, day, width, height, angle, res):
-    cur = Shape(csv_filename, day, (width, height), angle, res)
+def add_curve(curves, csv_filename, day, width, height, angle, res, scale):
+    cur = Shape(csv_filename, day, (width, height), angle, res, scale)
     curves.append(cur)  
     return curves
         
-def update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, res_flag = False, day_flag=False):
+def update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, res_flag = False, day_flag=False, scale = 1, angle = 0):
     img = Image.new("RGBA", (width, height), (255, 255, 255,0))
     
     
     if len(curves)>0:
         for i, curve in enumerate(curves):
             if res_flag:
+                curve.set_scale(scale)
+                curve.set_angle(angle)
                 curve.set_res(res)
             if day_flag:
                 im = curve.make_img(w_line, colormap, c_min, c_max, auto_flag, colors[i])    
@@ -261,7 +310,7 @@ def create_dataset(curves):
         #x_new = np.linspace(0, 100, curve.res)
         #bspline = interpolate.make_interp_spline(data['lenght'].values, data['c'].values)
         #y_new = bspline(x_new)
-        c_smooth = savgol_filter(data['c'].values, 11, 2)
+        c_smooth = savgol_filter(data['c'].values, 5, 2)
         curv_mean_sm.append(c_smooth.mean())
         data['c_smooth'] = c_smooth
         datasets.append(data)
@@ -424,7 +473,7 @@ def plot_results(kin, img, canvas, curve):
             datasets.append(data)
             
             #smoothing the growth data
-            l_smooth = savgol_filter(data['l'].values, 11, 2)
+            l_smooth = savgol_filter(data['l'].values, 5, 2)
             data['l_sm'] = l_smooth
             
             #calculation of growth stats
@@ -474,7 +523,7 @@ def plot_results(kin, img, canvas, curve):
             print(data0)
             print(data1)
             ###lenght distribution alonge the perimeter
-            data_inv = calc_normals(data0, data1, (w,h))
+            data_inv = calc_normals(data1, data0, (w,h), True)
             #data_inv = curve.filter_outliers(data_inv, 'l')
             datasets_inv.append(data_inv)
             print(data_inv['l'])
@@ -490,7 +539,7 @@ def plot_results(kin, img, canvas, curve):
             
             #filtering point with the negative curvature
 
-            data_sub = data_inv[data_inv['c_smooth'] >= 0.1]
+            data_sub = data_inv[data_inv['c_smooth'] >= 0.003]
             #caclulation of pearson correlation coefficientbetween growth and curvature (c<0)
             r_pos = np.corrcoef(data_sub['c_smooth'], data_sub['l'])[1,0]
             kin.loc[i, 'pearson_pos'] = r_pos
@@ -531,7 +580,7 @@ def plot_results(kin, img, canvas, curve):
     
     
     figure.tight_layout()
-    #figure.show()
+    figure.show()
 
     figure_canvas_agg = FigureCanvasTkAgg(figure, canvas)
     figure_canvas_agg.draw()
@@ -615,6 +664,8 @@ def main():
     warnings.filterwarnings("ignore")
     curves = []
     
+
+    
     layout_files = [
                     [
                         sg.Text("Image Folder"),
@@ -629,27 +680,29 @@ def main():
                     ],
                     [
                         sg.Text("Width"),
-                        sg.In('1608', size=(5, 1), key="-WIDTH-", enable_events=True),
+                        sg.In('3216', size=(5, 1), key="-WIDTH-", enable_events=True),
                         sg.Text("Height"),
-                        sg.In('1608',size=(5, 1), key="-HEIGHT-", enable_events=True),
+                        sg.In('3216',size=(5, 1), key="-HEIGHT-", enable_events=True),
                         sg.Text("Day"),
                         sg.In('0',size=(3, 1), key="-DAY-", enable_events=True),
                         sg.Text("Line Width"),
                         sg.In('10',size=(3, 1), key="-WIDTH_LINE-", enable_events=True),
                         sg.Text("Rotation angle"),
                         sg.In('0',size=(3, 1), key="-ANGLE-", enable_events=True),
+                        sg.Text("Scale"),
+                        sg.In('0.55',size=(5, 1), key="-SCALE-", enable_events=True),
                        
                     ],
                     [
                         sg.Text("Resolution"),
-                        sg.In('100', size=(5, 1), key="-RES-", enable_events=True),
+                        sg.In('70', size=(5, 1), key="-RES-", enable_events=True),
                         sg.Checkbox('Days',key="-DAYS-", default=False),
                         sg.Text("Colormap"),
                         sg.In('rainbow', size=(10, 1), key="-COLORMAP-", enable_events=True),
                         sg.Text("C-min"),
-                        sg.In('-0.01', size=(5, 1), key="-C_MIN-", enable_events=True),
+                        sg.In('-0.005', size=(5, 1), key="-C_MIN-", enable_events=True),
                         sg.Text("C-max"),
-                        sg.In('0.01', size=(5, 1), key="-C_MAX-", enable_events=True),    
+                        sg.In('0.005', size=(5, 1), key="-C_MAX-", enable_events=True),    
                         sg.Checkbox('Autorange',key="-AUTO-", default=False),
                         
                     ]
@@ -709,12 +762,12 @@ def main():
             
         elif event == "Clear last":
             day, width, height, angle = int(values["-DAY-"]), int(values["-WIDTH-"]), int(values["-HEIGHT-"]), int(values["-ANGLE-"])
-            res, w_line, colormap, c_min, c_max, auto_flag, days_flag = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"], values["-DAYS-"]
+            res, w_line, colormap, c_min, c_max, auto_flag, days_flag, scale = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"], values["-DAYS-"], float(values["-SCALE-"])
             
             if len(curves)>1:
                 curves.pop()    
             if len(curves)>0:
-                img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, True, days_flag)
+                img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, True, days_flag, scale, angle = angle)
                 kin = create_dataset(curves)
                 figure, data = plot_results(kin, img, window['-CANVAS-'].TKCanvas, curves[0]) 
                 window['-PLOT-'].update(visible = True)
@@ -724,9 +777,9 @@ def main():
             #clean canvas
         
         elif event == "Update settings": 
-            width, height = int(values["-WIDTH-"]), int(values["-HEIGHT-"])
-            res, w_line, colormap, c_min, c_max, auto_flag, days_flag = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"], values["-DAYS-"]
-            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, True, days_flag)
+            width, height, angle = int(values["-WIDTH-"]), int(values["-HEIGHT-"]), float(values["-ANGLE-"])
+            res, w_line, colormap, c_min, c_max, auto_flag, days_flag, scale = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"], values["-DAYS-"], float(values["-SCALE-"])
+            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, True, days_flag, scale, angle = angle)
             
             kin = create_dataset(curves)
             figure, data = plot_results(kin, img, window['-CANVAS-'].TKCanvas, curves[0]) 
@@ -735,10 +788,11 @@ def main():
         
         elif event == "Add curve": 
                 
-            day, width, height, angle = int(values["-DAY-"]), int(values["-WIDTH-"]), int(values["-HEIGHT-"]), int(values["-ANGLE-"])
-            res, w_line, colormap, c_min, c_max, auto_flag, days_flag = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"], values["-DAYS-"]
-            curves = add_curve(curves, csv_filename, day, width, height, angle, res)
-            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, True, days_flag)
+            day, width, height, angle = int(values["-DAY-"]), int(values["-WIDTH-"]), int(values["-HEIGHT-"]), float(values["-ANGLE-"])
+            res, w_line, colormap, c_min, c_max, auto_flag, days_flag, scale = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"], values["-DAYS-"], float(values["-SCALE-"])
+            
+            curves = add_curve(curves, csv_filename, day, width, height, angle, res, scale)
+            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, True, days_flag, scale, angle = angle)
             
             kin = create_dataset(curves)
             figure, data = plot_results(kin, img, window['-CANVAS-'].TKCanvas, curves[0]) 
@@ -748,8 +802,7 @@ def main():
             root_dir = sg.popup_get_folder('Please enter a folder name')
             
             width, height, angle = int(values["-WIDTH-"]), int(values["-HEIGHT-"]), int(values["-ANGLE-"])
-            res, w_line, colormap, c_min, c_max, auto_flag, days_flag = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"], values["-DAYS-"]
-            
+            res, w_line, colormap, c_min, c_max, auto_flag, days_flag, scale = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"], values["-DAYS-"], float(values["-SCALE-"])
             curves.clear()   
             window['-PLOT-'].update(visible = False)
             
@@ -765,8 +818,8 @@ def main():
                                 csv_filename = os.path.join(root, name)
                                 day = int(re.search(r'(?<= )([0-9]*)(?=.csv)', name).group(1))
                                 
-                                curves = add_curve(curves, csv_filename, day, width, height, angle, res)
-                            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, True, days_flag)
+                                curves = add_curve(curves, csv_filename, day, width, height, angle, res, scale)
+                            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, True, days_flag, scale, angle = angle)
                             kin = create_dataset(curves)
                             figure, data = plot_results(kin, img, window['-CANVAS-'].TKCanvas, curves[0])
                             
@@ -812,6 +865,8 @@ def main():
 
                     rep = data.iloc[i]['dataset']
                     rep.to_csv(name + '_'+str(time) +'_data.csv',index=True)
+                    rep_inv = data.iloc[i]['dataset_inv']
+                    rep_inv.to_csv(name + '_'+str(time) +'_data_inv.csv',index=True)
             except:
                 pass
             
