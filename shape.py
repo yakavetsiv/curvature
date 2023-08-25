@@ -183,7 +183,7 @@ class Shape:
         curv_down = np.power(dx_dt*dx_dt + dy_dt*dy_dt, 1.5)
     
         curv = np.divide(curv_up,curv_down)
-        data['c'] = curv
+        data['c'] = -curv
         
         return data
     
@@ -232,7 +232,7 @@ class Shape:
         return x_hist, y_hist     
     
     
-    def make_img(self, w, colormap, c_min, c_max, auto):
+    def make_img(self, w, colormap, c_min, c_max, auto, c_day = None):
         scale = 1
         
         
@@ -250,14 +250,17 @@ class Shape:
             x1, y1, c1 = self.data.iloc[i]
             x2, y2, c2 = self.data.iloc[i+1]
             
-            color = tuple([int(z * 255) for z in self.COL.get_rgb((c1+c2)/2)])
+            if c_day is None:
+                color = tuple([int(z * 255) for z in self.COL.get_rgb((c1+c2)/2)])
+            else:
+                color = c_day
             draw.line([(int(x1/scale), int(y1/scale)), (int(x2/scale), int(y2/scale))], fill=color, width = w, joint = 'curve')
             
             
         sc = 100
         #draw.line = ([(int(self.dim[0]/2), int(self.dim[1]/2)), (int(dim[0]/2+sc*math.cos(self.angle)), int(dim[1]/2+sc*math.sin(self.angle)))], fill='tab:red', width = 20)
-        #fin = Image.Image.rotate(out, self.angle)
-        out = ImageOps.flip(out)
+        out = out.rotate(90)
+        #out = ImageOps.flip(out)
         
         return out
         
