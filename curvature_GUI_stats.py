@@ -35,7 +35,7 @@ data = None
 fnames = []
 csv_filename = ""
 
-
+colors = [(31,119,180), (255,127,14), (44,180,44), (214,39,40)]
 
 
 class MplColorHelper:
@@ -65,11 +65,17 @@ def filelist(folder, ext):
     return fnames
 
 
-def fit_scale(p, mask, an):
-    scale = 0.01
+def fit_scale(p, mask, an, inv_flag):
+    if inv_flag:
+        inc = -0.01   
+        scale = -0.01
+    else: 
+        inc = 0.01    
+        scale = 0.01
+    
     uu, vv = vector_transform(an, scale, p=p) 
     while mask[int(vv),int(uu)]:
-        scale = scale + 0.01
+        scale = scale + inc
         uu, vv = vector_transform(an, scale, p=p) 
     return scale
     
@@ -81,7 +87,7 @@ def dir_number(dir):
     return r
 
 
-def calc_normals(data0, data1, size):
+def calc_normals(data0, data1, size, inv_flag = False):
     
     img = Image.new("1", size, color = 0)
 
@@ -92,20 +98,21 @@ def calc_normals(data0, data1, size):
     
     
     
+    
     data = data0.copy()
     data['an'] = 0
     data['l'] = 0
     data['u'] = 0
     data['v'] = 0
     
-    data.loc[0, 'an'] = normal(data0[['x','y']].iloc[-2].values, data0[['x','y']].iloc[0].values, data0[['x','y']].iloc[1].values)
-    data.loc[0, 'l'] = fit_scale(data0[['x','y']].iloc[0].values, mask_2d, data[['an']].iloc[0].values)
+    data.loc[0, 'an'] = normal(data0[['x','y']].iloc[-1].values, data0[['x','y']].iloc[0].values, data0[['x','y']].iloc[1].values)
+    data.loc[0, 'l'] = fit_scale(data0[['x','y']].iloc[0].values, mask_2d, data[['an']].iloc[0].values, inv_flag)
     pn1_x, pn1_y = vector_transform(data[['an']].iloc[0].values, data[['l']].iloc[0].values, data[['x','y']].iloc[0].values)
     data.loc[0, 'u'] = pn1_x
     data.loc[0, 'v'] = pn1_y
     
     data.loc[len(data)-1, 'an'] = normal(data0[['x','y']].iloc[-2].values, data0[['x','y']].iloc[-1].values, data0[['x','y']].iloc[0].values)
-    data.loc[len(data)-1, 'l'] = fit_scale(data0[['x','y']].iloc[-1].values, mask_2d, data[['an']].iloc[-1].values)
+    data.loc[len(data)-1, 'l'] = fit_scale(data0[['x','y']].iloc[-1].values, mask_2d, data[['an']].iloc[-1].values,inv_flag)
     pn1_x, pn1_y = vector_transform(data[['an']].iloc[-1].values, data[['l']].iloc[-1].values, data[['x','y']].iloc[-1].values)
     data.loc[len(data)-1, 'u'] = pn1_x
     data.loc[len(data)-1, 'v'] = pn1_y
@@ -114,8 +121,9 @@ def calc_normals(data0, data1, size):
     
     for i in range(1, len(data)-1):
         data.loc[i, 'an'] = normal(data0[['x','y']].iloc[i-1].values, data0[['x','y']].iloc[i].values, data0[['x','y']].iloc[i+1].values)
-        data.loc[i, 'l'] = fit_scale(data0[['x','y']].iloc[i].values, mask_2d, data[['an']].iloc[i].values)
+        data.loc[i, 'l'] = fit_scale(data0[['x','y']].iloc[i].values, mask_2d, data[['an']].iloc[i].values,inv_flag)
         pn1_x, pn1_y = vector_transform(data[['an']].iloc[i].values, data[['l']].iloc[i].values, data[['x','y']].iloc[i].values)
+            
         data.loc[i, 'u'] = pn1_x
         data.loc[i, 'v'] = pn1_y
    
@@ -162,7 +170,7 @@ def normal(p0, p1, p2):
     
     if ((-dy)> 0) & (dx <0):
         an = math.acos(dx/length)
-    
+  
     return an
     
 def cacl_lenght(data):
@@ -200,13 +208,18 @@ def add_curve(curves, csv_filename, day, width, height, angle, res):
     curves.append(cur)  
     return curves
         
-def update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, res_flag = False):
+def update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, res_flag = False, day_flag=False):
     img = Image.new("RGBA", (width, height), (255, 255, 255,0))
+    
+    
     if len(curves)>0:
-        for curve in curves:
+        for i, curve in enumerate(curves):
             if res_flag:
                 curve.set_res(res)
-            im = curve.make_img(w_line, colormap, c_min, c_max, auto_flag)
+            if day_flag:
+                im = curve.make_img(w_line, colormap, c_min, c_max, auto_flag, colors[i])    
+            else: 
+                im = curve.make_img(w_line, colormap, c_min, c_max, auto_flag)
             img = Image.alpha_composite(im, img)
     return img
   
@@ -267,6 +280,7 @@ def create_dataset(curves):
     
     
     kin['dataset'] = datasets
+    kin['dataset_inv'] = datasets
     
     return kin
     
@@ -335,7 +349,7 @@ def plot_results(kin, img, canvas, curve):
         data0 = kin.iloc[0]['dataset'].copy()
         data1 = kin.iloc[-1]['dataset'].copy()
             
-        data = calc_normals(data0, data1, (w,h))
+        data = calc_normals(data0, data1, (w,h), False)
         
         for i in range(len(data.index)):
             x = data.iloc[i]['x']
@@ -347,7 +361,7 @@ def plot_results(kin, img, canvas, curve):
             l = data.iloc[i]['l']
             
             uu, vv = vector_transform(an, l) 
-            if c <= 0:
+            if c >= 0:
                 ax[1,0].quiver(x, y, uu, vv, angles = 'uv', color=COL.color(c), units='xy', scale = 1, alpha = 1, width = 2)
             #plt.plot((x,u), (y,v), color=cmap(norm(c)))
            
@@ -365,8 +379,9 @@ def plot_results(kin, img, canvas, curve):
         polygon1 = Polygon(pol1, closed=True)
         
     
-        collection = PatchCollection([polygon1], alpha=0.05,  zorder= 1, color = ["tab:red"])
+        collection = PatchCollection([polygon1], alpha=0.00,  zorder= 1, color = ["tab:red"])
         ax[1,0].add_collection(collection)
+        
         
         ax[1,0].set_xlim(0,w)
         ax[1,0].set_ylim(0,h)
@@ -376,10 +391,19 @@ def plot_results(kin, img, canvas, curve):
         ax[1,0].set_ylabel('y')
         ax[1,0].set_xlabel('x')
         
-        kin['pearson'] = 0
+        #ax[1,0].figure.savefig('test.png')
+        
+        kin['pearson_neg'] = 0
+        kin['pearson_zero'] = 0
+        kin['pearson_pos'] = 0
         kin['l_mean'] = 0
         kin['l_median'] = 0
         kin['l_max'] = 0
+        
+        kin['l_mean_inv'] = 0
+        kin['l_median_inv'] = 0
+        kin['l_max_inv'] = 0
+        
         
         l = []
         l_m = []
@@ -415,16 +439,63 @@ def plot_results(kin, img, canvas, curve):
             l_m.append(data['l'].values.mean())
             
             
-            #filtering point with the negative curvature
-            data_sub = data[data['c'] <= 0]
-            #caclulation of pearson correlation coefficientbetween growth and curvature (c<0)
-            r = np.corrcoef(data_sub['c'], data_sub['l'])[1,0]
-            kin.loc[i+1, 'pearson'] = r
-            #plotting the growth vs curvature
-            ax[2,1].scatter(data_sub['c'], data_sub['l'], s = 10, label = f'{t0}-{t1}: P = {round(r, 2)}')
             
+            
+            #filtering point with the negative curvature
+            data_sub = data[data['c_smooth'] <= -0.005]
+            #caclulation of pearson correlation coefficientbetween growth and curvature (c<0)
+            r_neg = np.corrcoef(data_sub['c_smooth'], data_sub['l_sm'])[1,0]
+            kin.loc[i+1, 'pearson_neg'] = r_neg
+            
+            data_sub = data[(data['c_smooth'] <= 0.005) & (data['c_smooth'] > -0.005)]
+            #caclulation of pearson correlation coefficientbetween growth and curvature (c<0)
+            r_zero = np.corrcoef(data_sub['c_smooth'], data_sub['l_sm'])[1,0]
+            kin.loc[i+1, 'pearson_zero'] = r_zero
+            
+            data_sub = data[(data['c_smooth'] <= -0.005)]
+            #plotting the growth vs curvature
+            ax[2,1].scatter(data_sub['c_smooth'], data_sub['l_sm'], s = 10, label = f'{t0}-{t1}: Pneg = {round(r_neg, 2)}')
         
         kin['dataset'] = datasets
+        
+        
+        datasets_inv = [kin.iloc[0]['dataset_inv'].copy()]
+        
+        for i in range(len(kin.index)-1, 0, -1):
+            
+            #loading the datasets and time-label
+            data0 = kin.iloc[i]['dataset_inv'].copy()
+            data1 = kin.iloc[i-1]['dataset_inv'].copy()
+            t0 = int(kin.iloc[i]['time'])
+            t1 = int(kin.iloc[i-1]['time'])
+            print(t0)
+            print(t1)
+            #t.append(t0)
+            print(data0)
+            print(data1)
+            ###lenght distribution alonge the perimeter
+            data_inv = calc_normals(data0, data1, (w,h))
+            #data_inv = curve.filter_outliers(data_inv, 'l')
+            datasets_inv.append(data_inv)
+            print(data_inv['l'])
+            
+            #calculation of growth stats
+            kin.loc[i, 'l_mean_inv'] = data_inv['l'].mean()
+            kin.loc[i, 'l_median_inv'] = data_inv['l'].median()
+            kin.loc[i, 'l_max_inv'] = data_inv['l'].max()
+            
+            #plotting the data + smooth line
+            #ax[1,1].scatter(data_inv['lenght'], data_inv['l'], alpha = 0.4, s = 10) 
+            
+            
+            #filtering point with the negative curvature
+
+            data_sub = data_inv[data_inv['c_smooth'] >= 0.1]
+            #caclulation of pearson correlation coefficientbetween growth and curvature (c<0)
+            r_pos = np.corrcoef(data_sub['c_smooth'], data_sub['l'])[1,0]
+            kin.loc[i, 'pearson_pos'] = r_pos
+            
+        kin['dataset_inv'] = datasets_inv
         
         ax[1,1].set_title('Growth distribution', fontsize=14)
         ax[1,1].legend()
@@ -572,7 +643,7 @@ def main():
                     [
                         sg.Text("Resolution"),
                         sg.In('100', size=(5, 1), key="-RES-", enable_events=True),
-                        
+                        sg.Checkbox('Days',key="-DAYS-", default=False),
                         sg.Text("Colormap"),
                         sg.In('rainbow', size=(10, 1), key="-COLORMAP-", enable_events=True),
                         sg.Text("C-min"),
@@ -638,13 +709,12 @@ def main():
             
         elif event == "Clear last":
             day, width, height, angle = int(values["-DAY-"]), int(values["-WIDTH-"]), int(values["-HEIGHT-"]), int(values["-ANGLE-"])
-            res, w_line, colormap = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"]
-            c_min, c_max, auto_flag = float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"]
+            res, w_line, colormap, c_min, c_max, auto_flag, days_flag = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"], values["-DAYS-"]
             
             if len(curves)>1:
                 curves.pop()    
             if len(curves)>0:
-                img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, False)
+                img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, True, days_flag)
                 kin = create_dataset(curves)
                 figure, data = plot_results(kin, img, window['-CANVAS-'].TKCanvas, curves[0]) 
                 window['-PLOT-'].update(visible = True)
@@ -655,8 +725,8 @@ def main():
         
         elif event == "Update settings": 
             width, height = int(values["-WIDTH-"]), int(values["-HEIGHT-"])
-            res, w_line, colormap, c_min, c_max, auto_flag = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"]
-            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, True)
+            res, w_line, colormap, c_min, c_max, auto_flag, days_flag = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"], values["-DAYS-"]
+            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, True, days_flag)
             
             kin = create_dataset(curves)
             figure, data = plot_results(kin, img, window['-CANVAS-'].TKCanvas, curves[0]) 
@@ -666,10 +736,9 @@ def main():
         elif event == "Add curve": 
                 
             day, width, height, angle = int(values["-DAY-"]), int(values["-WIDTH-"]), int(values["-HEIGHT-"]), int(values["-ANGLE-"])
-            res, w_line, colormap = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"]
-            c_min, c_max, auto_flag = float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"]
+            res, w_line, colormap, c_min, c_max, auto_flag, days_flag = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"], values["-DAYS-"]
             curves = add_curve(curves, csv_filename, day, width, height, angle, res)
-            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, False)
+            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, True, days_flag)
             
             kin = create_dataset(curves)
             figure, data = plot_results(kin, img, window['-CANVAS-'].TKCanvas, curves[0]) 
@@ -679,8 +748,7 @@ def main():
             root_dir = sg.popup_get_folder('Please enter a folder name')
             
             width, height, angle = int(values["-WIDTH-"]), int(values["-HEIGHT-"]), int(values["-ANGLE-"])
-            res, w_line, colormap = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"]
-            c_min, c_max, auto_flag = float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"]
+            res, w_line, colormap, c_min, c_max, auto_flag, days_flag = int(values["-RES-"]), int(values["-WIDTH_LINE-"]), values["-COLORMAP-"], float(values["-C_MIN-"]), float(values["-C_MAX-"]), values["-AUTO-"], values["-DAYS-"]
             
             curves.clear()   
             window['-PLOT-'].update(visible = False)
@@ -698,7 +766,7 @@ def main():
                                 day = int(re.search(r'(?<= )([0-9]*)(?=.csv)', name).group(1))
                                 
                                 curves = add_curve(curves, csv_filename, day, width, height, angle, res)
-                            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag)
+                            img = update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_flag, True, days_flag)
                             kin = create_dataset(curves)
                             figure, data = plot_results(kin, img, window['-CANVAS-'].TKCanvas, curves[0])
                             
@@ -739,6 +807,11 @@ def main():
                 sg.popup("Cancel", "No filename supplied")
             try:    
                 data.to_csv(name + '.csv',index=True)
+                for i in range(len(data.index)):
+                    time = data.iloc[i]['time']
+
+                    rep = data.iloc[i]['dataset']
+                    rep.to_csv(name + '_'+str(time) +'_data.csv',index=True)
             except:
                 pass
             
