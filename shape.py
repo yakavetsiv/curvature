@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageChops, ImageOps
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from matplotlib import cm
-from scipy.interpolate import UnivariateSpline
+from scipy.interpolate import UnivariateSpline, CubicSpline
 import math
 
 class MplColorHelper:
@@ -32,93 +32,240 @@ class MplColorHelper:
   def renorm(self, start_val, stop_val):
       self.norm = mpl.colors.Normalize(vmin=start_val, vmax=stop_val)
       self.scalarMap = cm.ScalarMappable(norm=self.norm, cmap=self.cmap)
-
+      
 
 
 
 class Shape:
     
-    def __init__(self, data_name, time, dim = (500,500), angle = 0, res = 100):
+    def __init__(self, data_name, time, dim = (500,500), angle = 0, res_l = 100, scale = 1):
         self.time = time
         self.data_name = data_name
-        self.dim = dim
-        self.res = res
-        self.raw_data =self._load_data(self.data_name)
         
-        self.data = self.smooth(self.raw_data, k = 3, s = 100)
+        self.dim = dim
+        self.res_l = res_l
+        self.scale = scale
         self.angle = np.deg2rad(angle)
         
-        self.area, self.cx, self.cy, self.solidity = self.moments(self.data)
+        self.raw_data = self._load_data(self.data_name)
+        self.scale_data = self.raw_data.copy()
         
-        self.offset_x, self.offset_y = self.offsets()
-        self.perimeter = self.calc_perimeter()
-        self.circ = (4*math.pi*self.area)/(self.perimeter*self.perimeter)
+        self.scale_data['x'] = self.raw_data['x'] / self.scale
+        self.scale_data['y'] = self.raw_data['y'] / self.scale
         
-        self.data = self.curvature(self.data)
+        self.scale_data['x'].round(0)
+        self.scale_data['y'].round(0)
+        print(self.scale_data)
         
-        self.data = self.filter_outliers(self.data, 'c')
-        
-        self.rotate()
-        
-        self.width = self.data['x'].max() - self.data['x'].min()
-        self.height = self.data['y'].max() - self.data['y'].min()
 
-    
-    def set_res(self, res):
-        self.res = res  
         
-        self.data = self.smooth(self.raw_data, k = 3, s = 100)
+        self.perimeter = self.calc_perimeter()
+        self.res = int(self.perimeter/self.res_l)
+        self.rotate()
         
+        self.data = self.smooth(self.scale_data, k = 3, s = self.res-1)
         
         self.area, self.cx, self.cy, self.solidity = self.moments(self.data)
-        self.offset_x, self.offset_y = self.offsets()
-        self.perimeter = self.calc_perimeter()
         
-        self.circ = (4*math.pi*self.area)/(self.perimeter*self.perimeter)
-        self.data = self.curvature(self.data)
-        self.data = self.filter_outliers(self.data, 'c')
-        self.rotate()
+        self.offset_x, self.offset_y = self.offsets()
+        
+        self.move_start()
+               
         
         self.width = self.data['x'].max() - self.data['x'].min()
         self.height = self.data['y'].max() - self.data['y'].min()
+        
+        self.circ = (4*math.pi*self.area)/(self.perimeter*self.perimeter)
+        
+        self.data = self.curvature(self.data)
+        
+        self.data = self.filter_outliers(self.data, 'c')
+        
+
+    def set_scale(self, scale):
+        self.scale = scale
+        self.scale_data = self.raw_data.copy()
+        
+        self.scale_data['x'] = self.raw_data['x'] / self.scale
+        self.scale_data['y'] = self.raw_data['y'] / self.scale
+        
+        self.scale_data['x'].round(0)
+        self.scale_data['y'].round(0)
+
+        
+
+        
+        self.perimeter = self.calc_perimeter()
+        self.res = int(self.perimeter/self.res_l)
+        self.rotate()
+        
+        self.data = self.smooth(self.scale_data, k = 3, s = self.res-1)
+        
+        self.area, self.cx, self.cy, self.solidity = self.moments(self.data)
+        
+        self.offset_x, self.offset_y = self.offsets()
+        
+        self.move_start()
+               
+        
+        self.width = self.data['x'].max() - self.data['x'].min()
+        self.height = self.data['y'].max() - self.data['y'].min()
+        
+        self.circ = (4*math.pi*self.area)/(self.perimeter*self.perimeter)
+        
+        self.data = self.curvature(self.data)
+        
+        self.data = self.filter_outliers(self.data, 'c')
+        
+        
+
+    def set_res(self, res_l):
+        self.res_l = res_l
+
+        self.scale_data = self.raw_data.copy()
+        
+        self.scale_data['x'] = self.raw_data['x'] / self.scale
+        self.scale_data['y'] = self.raw_data['y'] / self.scale
+        
+        self.scale_data['x'].round(0)
+        self.scale_data['y'].round(0)
+        
+
+        
+        self.perimeter = self.calc_perimeter()
+        self.res = int(self.perimeter/self.res_l)
+        self.rotate()
+        
+        self.data = self.smooth(self.scale_data, k = 3, s = self.res-1)
+        
+        self.area, self.cx, self.cy, self.solidity = self.moments(self.data)
+        
+        self.offset_x, self.offset_y = self.offsets()
+        
+        self.move_start()
+               
+        
+        self.width = self.data['x'].max() - self.data['x'].min()
+        self.height = self.data['y'].max() - self.data['y'].min()
+        
+        self.circ = (4*math.pi*self.area)/(self.perimeter*self.perimeter)
+        
+        self.data = self.curvature(self.data)
+        
+        self.data = self.filter_outliers(self.data, 'c')
+        
+    def set_angle(self, angle):
+        self.angle = np.deg2rad(angle)
+        
+        
+        self.scale_data = self.raw_data.copy()
+        
+        self.scale_data['x'] = self.raw_data['x'] / self.scale
+        self.scale_data['y'] = self.raw_data['y'] / self.scale
+        
+        self.scale_data['x'].round(0)
+        self.scale_data['y'].round(0)
+        
+
+        
+        self.perimeter = self.calc_perimeter()
+        self.res = int(self.perimeter/self.res_l)
+        self.rotate()
+        
+        self.data = self.smooth(self.scale_data, k = 3, s = self.res-1)
+        
+        self.area, self.cx, self.cy, self.solidity = self.moments(self.data)
+        
+        self.offset_x, self.offset_y = self.offsets()
+        
+        self.move_start()
+               
+        
+        self.width = self.data['x'].max() - self.data['x'].min()
+        self.height = self.data['y'].max() - self.data['y'].min()
+        
+        self.circ = (4*math.pi*self.area)/(self.perimeter*self.perimeter)
+        
+        self.data = self.curvature(self.data)
+        
+        self.data = self.filter_outliers(self.data, 'c')
     
     def calc_perimeter(self):
-        data = self.data.copy()
-        data['lenght'] = 0
-        data.loc[0, 'lenght'] = 0
-        for i in range(len(data.index)-1):       
-            data.loc[i+1, 'lenght'] = data.iloc[i]['lenght'] + math.dist((data.iloc[i]['x'], data.iloc[i]['y']), (data.iloc[i+1]['x'], data.iloc[i+1]['y']))
-        return data.iloc[-1]['lenght'] 
+        data = self.scale_data.copy()
+        
+        
+        #data['lenght'] = 0
+        #data.loc[0, 'lenght'] = 0
+        #for i in range(len(data.index)-1):       
+            #data.loc[i+1, 'lenght'] = data.iloc[i]['lenght'] + math.dist((data.iloc[i]['x'], data.iloc[i]['y']), (data.iloc[i+1]['x'], data.iloc[i+1]['y']))
+        points = data[['x', 'y']].to_numpy()
+        points = np.append(points,points[:1], axis=0)
+        
+        distance = np.cumsum( np.sqrt(np.sum( np.diff(points, axis=0)**2, axis=1 )) )
+        
+        return distance[-1]
     
+    def move_start(self):
+        data = self.data.copy()
+        
+        data['x'] = data['x'] - self.offset_x
+        data['y'] = data['y'] - self.offset_y
+        
+        points = data[['x', 'y']].to_numpy()
+        points = np.append(points,points[:1], axis=0)
+        a = points[:,1]-self.dim[1]/2
+        zero_crossings = np.where(np.diff(np.sign(a)))[0]
+        print(zero_crossings)
+        roll = zero_crossings[0]
+
+        for zero in zero_crossings:
+            print(points[zero, 0])
+            if points[zero, 0] < points[roll, 0]:
+                roll = zero
+        
+        print(points)
+        print(roll)
+        points_rolled = np.roll(points, -roll-1, axis = 0)
+        print(points_rolled)
+        
+        data_rolled_rolled = pd.DataFrame(points_rolled, columns = ['x', 'y'])
+        self.data[['x', 'y']] = data_rolled_rolled[['x','y']]
+        
         
     def _load_data(self, name):
         df = pd.DataFrame(columns=['x', 'y', 'c'])
         try:
             data = pd.read_csv(name, index_col=None)
             df[['x', 'y']] = data[['X','Y']]
+            print(df)
         except:
             pass
+        
         return df
     
     def rotate(self):
-        data1 = self.data.copy()
+        data1 = self.scale_data.copy()
+        data = self.scale_data.copy()
         ox, oy = self.dim[0]/2, self.dim[1]/2
  
-        data1['x'] = ox + math.cos(self.angle) * (self.data['x'] - ox) - math.sin(self.angle) * (self.data['y'] - oy)
-        data1['y'] = oy + math.sin(self.angle) * (self.data['x'] - ox) + math.cos(self.angle) * (self.data['y'] - oy)
+        data1['x'] = ox + math.cos(self.angle) * (data['x'] - ox) - math.sin(self.angle) * (data['y'] - oy)
+        data1['y'] = oy + math.sin(self.angle) * (data['x'] - ox) + math.cos(self.angle) * (data['y'] - oy)
          
-        self.data[['x', 'y']] = data1[['x','y']]
+        self.scale_data[['x', 'y']] = data1[['x','y']]
+        #return data
           
     def filter_outliers(self, df, col_name):
-        q_low = df[col_name].quantile(0.02)
-        q_hi  = df[col_name].quantile(0.98)
+        q_low = df[col_name].quantile(0.01)
+        q_hi  = df[col_name].quantile(0.99)
         
         df_filtered = df[(df[col_name] < q_hi) & (df[col_name] > q_low)]
  
         return df_filtered
     
     def moments(self, data):
+        print(data)
         imageMoments = cv2.moments(np.array(data[['x', 'y']]).astype('int32'))
+        print(imageMoments)
         cx = int(imageMoments['m10']/imageMoments['m00'])
         cy = int(imageMoments['m01']/imageMoments['m00'])
         area = imageMoments['m00']
@@ -170,8 +317,11 @@ class Shape:
     
     def curvature(self, data):
         
-        data['x'] = data['x'] - self.offset_x
-        data['y'] = data['y'] - self.offset_y
+        points = data[['x', 'y']].to_numpy()
+        points = np.append(points,points[:1], axis=0)
+        
+        distance = np.cumsum( np.sqrt(np.sum( np.diff(points, axis=0)**2, axis=1 )) )
+        distance = distance/distance[-1]
         
         dx_dt = np.gradient(data['x'].to_numpy())
         dy_dt = np.gradient(data['y'].to_numpy())
@@ -184,6 +334,7 @@ class Shape:
     
         curv = np.divide(curv_up,curv_down)
         data['c'] = -curv
+        data['u'] = distance
         
         return data
     
@@ -191,18 +342,20 @@ class Shape:
         
         points = data[['x', 'y']].to_numpy()
         points = np.append(points,points[:1], axis=0)
+        #points = np.roll(points, int(self.res/2), axis = 0)
         
         # Linear length along the line:
         distance = np.cumsum( np.sqrt(np.sum( np.diff(points, axis=0)**2, axis=1 )) )
         distance = np.insert(distance, 0, 0)/distance[-1]
     
         # Build a list of the spline function, one for each dimension:
-        splines = [UnivariateSpline(distance, coords, k = k, s=s) for coords in points.T]
+        splines = [UnivariateSpline(distance, coords, k = k) for coords in points.T]
+        #splines = [CubicSpline(distance, coords) for coords in points.T]
     
         # Computed the spline for the asked distances:
         alpha = np.linspace(0, 1, self.res)
         points_fitted = np.vstack(spl(alpha) for spl in splines ).T
-        
+        print(points_fitted)
         new_data = pd.DataFrame(points_fitted, columns = ['x', 'y'])
         
         return new_data
@@ -232,34 +385,55 @@ class Shape:
         return x_hist, y_hist     
     
     
-    def make_img(self, w, colormap, c_min, c_max, auto, c_day = None):
+    def scale_bar(self, out, size, offset):
+        draw = ImageDraw.Draw(out)
+        width = 50
+        draw.rectangle([(offset, self.dim[1]-offset-size), (offset + width, self.dim[1]-offset)], fill=(0,0,0), width = 1)
+        
+        return out
+    
+    def make_img(self, w, colormap, c_min, c_max, auto, c_day = None, alpha = None):
         scale = 1
-        
-        
+        r = 20
+        flag_30 = False
         
         out = Image.new("RGBA", (self.dim[0], self.dim[1]), (255, 255, 255,0))
         if auto:
             c_min = self.data['c'].min()
             c_max = self.data['c'].max()
 
-
+        
+        print(self.data)
         self.COL = MplColorHelper(colormap, c_min, c_max)
 
         draw = ImageDraw.Draw(out)
         for i in range(self.data.shape[0]-1):
-            x1, y1, c1 = self.data.iloc[i]
-            x2, y2, c2 = self.data.iloc[i+1]
+            x1, y1, c1, u1 = self.data.iloc[i]
+            x2, y2, c2, u2 = self.data.iloc[i+1]
             
             if c_day is None:
                 color = tuple([int(z * 255) for z in self.COL.get_rgb((c1+c2)/2)])
             else:
                 color = c_day
+            if i == 0:    
+                draw.ellipse([(int(x1/scale)-r, int(y1/scale)-r), (int(x1/scale)+r, int(y1/scale)+r)], fill=(0,0,0), width = 1)
+            if (u1 > 0.3) & (flag_30 == False):    
+                draw.rectangle([(int(x1/scale)-r, int(y1/scale)-r), (int(x1/scale)+r, int(y1/scale)+r)], fill=(0,0,0), width = 1)
+                flag_30 = True
+            
             draw.line([(int(x1/scale), int(y1/scale)), (int(x2/scale), int(y2/scale))], fill=color, width = w, joint = 'curve')
-            
-            
+        
+        x1, y1, c1, u1 = self.data.iloc[-1]
+        x2, y2, c2, u2 = self.data.iloc[0]
+        draw.line([(int(x1/scale), int(y1/scale)), (int(x2/scale), int(y2/scale))], fill=color, width = w, joint = 'curve')
+        
+                
+        
+        out = self.scale_bar(out, 300, 100)
         sc = 100
         #draw.line = ([(int(self.dim[0]/2), int(self.dim[1]/2)), (int(dim[0]/2+sc*math.cos(self.angle)), int(dim[1]/2+sc*math.sin(self.angle)))], fill='tab:red', width = 20)
         out = out.rotate(90)
+        out.show()
         #out = ImageOps.flip(out)
         
         return out
