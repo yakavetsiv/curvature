@@ -2,12 +2,11 @@
 
 Image processing script for calculation of local curvature and growth of tumoroids based on their shape. 
 - [Installation](#installation)
-- [Image pre-processing](#image-pre-processing)
+- [Input data](#input-data)
 - [Running the script](#running-the-script)
-  * [Absolute cell viability](#absolute-cell-viability)
-  * [Relative cell viability](#relative-cell-viability)
-- [Configuration](#configuration)
-  * [Default settings](#default-settings)
+  * [Curvature analysis for single shape](#curvature-analysis-for-single-shape)
+  * [Growth kinetics](#growth-kinetics)
+
 
 
 # Installation
