@@ -47,7 +47,7 @@ class Shape:
         self.scale = scale
         self.angle = np.deg2rad(angle)
         
-        self.raw_data = self._load_data(self.data_name)
+        self.raw_data = self.load_data(self.data_name)
         self.scale_data = self.raw_data.copy()
         
         self.scale_data['x'] = self.raw_data['x'] / self.scale
@@ -63,7 +63,7 @@ class Shape:
         self.res = int(self.perimeter/self.res_l)
         self.rotate()
         
-        self.data = self.smooth(self.scale_data, k = 3, s = self.res-1)
+        self.data = self.smooth(self.scale_data, k = 3, s = self.res-10)
         
         self.area, self.cx, self.cy, self.solidity = self.moments(self.data)
         
@@ -232,7 +232,7 @@ class Shape:
         self.data[['x', 'y']] = data_rolled_rolled[['x','y']]
         
         
-    def _load_data(self, name):
+    def load_data(self, name):
         df = pd.DataFrame(columns=['x', 'y', 'c'])
         try:
             data = pd.read_csv(name, index_col=None)
@@ -354,7 +354,10 @@ class Shape:
     
         # Computed the spline for the asked distances:
         alpha = np.linspace(0, 1, self.res)
-        points_fitted = np.vstack(spl(alpha) for spl in splines ).T
+
+        points_fitted = np.stack([spl(alpha) for spl in splines], axis=1)
+        #np.stack([np.ones(3) for _ in range(3)]) 
+
         print(points_fitted)
         new_data = pd.DataFrame(points_fitted, columns = ['x', 'y'])
         
@@ -433,7 +436,7 @@ class Shape:
         sc = 100
         #draw.line = ([(int(self.dim[0]/2), int(self.dim[1]/2)), (int(dim[0]/2+sc*math.cos(self.angle)), int(dim[1]/2+sc*math.sin(self.angle)))], fill='tab:red', width = 20)
         out = out.rotate(90)
-        out.show()
+        #out.show()
         #out = ImageOps.flip(out)
         
         return out

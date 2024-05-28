@@ -18,7 +18,7 @@ from matplotlib.ticker import NullFormatter  # useful for `logit` scale
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.ticker import MultipleLocator
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap
-from shape import Shape
+from shape import Shape, MplColorHelper
 import math
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Polygon
@@ -27,6 +27,7 @@ from scipy import interpolate, stats
 from scipy.signal import savgol_filter
 import warnings
 from datetime import date
+from scipy.interpolate import UnivariateSpline, CubicSpline
 
 figure_canvas_agg = None
 img = Image.new("RGBA", (500, 500), (255, 255, 255,0))
@@ -103,7 +104,7 @@ def calc_normals(data0, data1, size, inv_flag = False):
         pol0 = [(e[0], e[1]) for e in data0[['x','y']].to_numpy().reshape(len(data0), 2).tolist()]
         draw.polygon(pol1, fill = 1, outline =1) 
         draw.polygon(pol0, fill = 0, outline =0)
-        img.show()
+        #img.show()
         mask_2d = np.asarray(img)
         
     
@@ -177,10 +178,99 @@ def calc_normals(data0, data1, size, inv_flag = False):
             
     return data
 
+
+
+def sim_normals(curves, data0, size, l_sim = 10, res = 100, folder = None):
+    #img = Image.new("1", size, color = 0)
+    #draw = ImageDraw.Draw(img)
+
+
+    #pol1 = [(e[0], e[1]) for e in data1[['x','y']].to_numpy().reshape(len(data1), 2).tolist()]
+    #draw.polygon(pol1, fill = 1) 
+    #mask_2d = np.asarray(img)
+    
+    data = data0.copy()
+    data['an'] = 0
+    data['l'] = l_sim
+    data['u'] = 0
+    data['v'] = 0
+    
+    data.loc[0, 'an'] = normal(data0[['x','y']].iloc[-1].values, data0[['x','y']].iloc[0].values, data0[['x','y']].iloc[1].values)
+
+    pn1_x, pn1_y = vector_transform(data[['an']].iloc[0].values, data[['l']].iloc[0].values, data[['x','y']].iloc[0].values)
+    data.loc[0, 'u'] = pn1_x
+    data.loc[0, 'v'] = pn1_y
+    
+    data.loc[len(data)-1, 'an'] = normal(data0[['x','y']].iloc[-2].values, data0[['x','y']].iloc[-1].values, data0[['x','y']].iloc[0].values)
+    pn1_x, pn1_y = vector_transform(data[['an']].iloc[-1].values, data[['l']].iloc[-1].values, data[['x','y']].iloc[-1].values)
+    data.loc[len(data)-1, 'u'] = pn1_x
+    data.loc[len(data)-1, 'v'] = pn1_y
+    
+    
+    for i in range(1, len(data)-1):
+        data.loc[i, 'an'] = normal(data0[['x','y']].iloc[i-1].values, data0[['x','y']].iloc[i].values, data0[['x','y']].iloc[i+1].values)
+        pn1_x, pn1_y = vector_transform(data[['an']].iloc[i].values, data[['l']].iloc[i].values, data[['x','y']].iloc[i].values)
+        data.loc[i, 'u'] = pn1_x
+        data.loc[i, 'v'] = pn1_y
+    
+    data['x'] = data['u']
+    data['y'] = data['v']
+
+
+    data_sm = smooth(data, res = res)
+    #print(data_sm)
+    data_sim = curves[0].curvature(data_sm)
+    data0 =  curves[0].data.copy()
+    data1 =  curves[-1].data.copy()
+    COL = curves[0].COL
+    out = Image.new("RGBA", size, (255, 255, 255, 0))
+    img_0 = draw_contour(out, data0, COL, c_day = colors[0])
+    img_1 = draw_contour(img_0, data_sim, COL)
+    img_out = draw_contour(img_1, data1, COL, c_day = colors[1])
+
+
+    if folder is None: 
+        img_filename = sg.popup_get_file('Please enter a file name',  save_as = True)
+    else:
+        img_name = f'l_sim-{l_sim}_res-{res}.png'
+        img_filename = os.path.join(folder, img_name)
+    try:
+        img_out.save(img_filename, "PNG")
+    except:
+        sg.popup("Error")
+        
+    img_out.show()
+    
+
+def draw_contour(out, data, COL, w = 10, scale = 1, c_day = None):
+    r = 20
+    flag_30 = False
+    draw = ImageDraw.Draw(out)
+    for i in range(data.shape[0]-1):
+        x1, y1, c1, u1 = data.iloc[i]
+        x2, y2, c2, u2 = data.iloc[i+1]
+        if c_day is None:
+            color = tuple([int(z * 255) for z in COL.get_rgb((c1+c2)/2)])
+        else:
+            color = c_day
+        if i == 0:    
+            draw.ellipse([(int(x1/scale)-r, int(y1/scale)-r), (int(x1/scale)+r, int(y1/scale)+r)], fill=(0,0,0), width = 1)
+        if (u1 > 0.3) & (flag_30 == False):    
+            draw.rectangle([(int(x1/scale)-r, int(y1/scale)-r), (int(x1/scale)+r, int(y1/scale)+r)], fill=(0,0,0), width = 1)
+            flag_30 = True
+        
+        draw.line([(int(x1/scale), int(y1/scale)), (int(x2/scale), int(y2/scale))], fill=color, width = w, joint = 'curve')
+    
+    x1, y1, c1, u1 = data.iloc[-1]
+    x2, y2, c2, u2 = data.iloc[0]
+    draw.line([(int(x1/scale), int(y1/scale)), (int(x2/scale), int(y2/scale))], fill=color, width = w, joint = 'curve')
+
+    return out
+
 def vector_transform(an, l, p = [0,0]):
     ###calculation of angle from slope
-    x = p[0] + math.sin(an)*l
-    y = p[1] + math.cos(an)*l
+    x = p[0] + math.sin(an)*int(l)
+    y = p[1] + math.cos(an)*int(l)
     return x,y
 
 
@@ -271,7 +361,30 @@ def update_img(curves, res, width, height, w_line, colormap, c_min, c_max, auto_
                 im = curve.make_img(w_line, colormap, c_min, c_max, auto_flag)
             img = Image.alpha_composite(im, img)
     return img
-  
+
+def smooth(data, k=3, s= 0.2, res = 100):
+        
+        points = data[['x', 'y']].to_numpy()
+        points = np.append(points,points[:1], axis=0)
+        #points = np.roll(points, int(self.res/2), axis = 0)
+        
+        # Linear length along the line:
+        distance = np.cumsum( np.sqrt(np.sum( np.diff(points, axis=0)**2, axis=1 )) )
+        distance = np.insert(distance, 0, 0)/distance[-1]
+    
+        # Build a list of the spline function, one for each dimension:
+        splines = [UnivariateSpline(distance, coords, k = k) for coords in points.T]
+        #splines = [CubicSpline(distance, coords) for coords in points.T]
+    
+        # Computed the spline for the asked distances:
+        alpha = np.linspace(0, 1, res)
+
+        points_fitted = np.stack([spl(alpha) for spl in splines], axis=1)
+        #np.stack([np.ones(3) for _ in range(3)]) 
+
+        new_data = pd.DataFrame(points_fitted, columns = ['x', 'y'])
+        
+        return new_data 
 
 def create_dataset(curves):
     times = []
@@ -355,10 +468,6 @@ def plot_results(kin, img, canvas, curve):
     figure, ax = plt.subplots(3, 2, figsize = (8,12))
 
     
-    
-    
-    
-    
     kin = kin.sort_values(by = 'time', ignore_index=True)
     kin['width'] = kin['width_raw']-kin['width_raw'].values[0]
     kin['height'] = kin['height_raw']-kin['height_raw'].values[0]
@@ -374,7 +483,7 @@ def plot_results(kin, img, canvas, curve):
     
     w, h = img.size
     ax[0,0].set_title('Curvature')
-    ax[0,0].imshow(img)
+    #ax[0,0].imshow(img)
     ax[0,0].set_xlabel('x')
     ax[0,0].set_ylabel('y')
     ax[0,0].plot([0,w], [h/2, h/2], '--', color = 'tab:grey', alpha = 0.5, linewidth=0.5 )
@@ -517,16 +626,16 @@ def plot_results(kin, img, canvas, curve):
             data1 = kin.iloc[i-1]['dataset_inv'].copy()
             t0 = int(kin.iloc[i]['time'])
             t1 = int(kin.iloc[i-1]['time'])
-            print(t0)
-            print(t1)
+            #print(t0)
+            #print(t1)
             #t.append(t0)
-            print(data0)
-            print(data1)
+            #print(data0)
+            #print(data1)
             ###lenght distribution alonge the perimeter
             data_inv = calc_normals(data1, data0, (w,h), True)
             #data_inv = curve.filter_outliers(data_inv, 'l')
             datasets_inv.append(data_inv)
-            print(data_inv['l'])
+            #print(data_inv['l'])
             
             #calculation of growth stats
             kin.loc[i, 'l_mean_inv'] = data_inv['l'].mean()
@@ -580,7 +689,7 @@ def plot_results(kin, img, canvas, curve):
     
     
     figure.tight_layout()
-    figure.show()
+    #figure.show()
 
     figure_canvas_agg = FigureCanvasTkAgg(figure, canvas)
     figure_canvas_agg.draw()
@@ -704,6 +813,8 @@ def main():
                         sg.Text("C-max"),
                         sg.In('0.005', size=(5, 1), key="-C_MAX-", enable_events=True),    
                         sg.Checkbox('Autorange',key="-AUTO-", default=False),
+                        sg.Text("Sim growth rate"),
+                        sg.In('-1', size=(5, 1), key="-GR_SIM-", enable_events=True),  
                         
                     ]
                     
@@ -730,7 +841,7 @@ def main():
                         sg.Button('Add curve'),
                         sg.Button('Automated analysis'),
                         sg.Text(""),
-                        sg.Button('Summary report'),
+                        sg.Button('Simulation of growth'),
                     ],
                     [
                         sg.Button('Update settings'),
@@ -872,6 +983,27 @@ def main():
             
         elif event == "Auto save": 
             auto_save(csv_filename, img, figure, data)
+
+        elif event == "Simulation of growth": 
+            
+            if len(kin.index)>1:
+
+                width, height = int(values["-WIDTH-"]), int(values["-HEIGHT-"])
+                data0 = data.iloc[0]['dataset'].copy()
+                res = data.iloc[0]['res']
+            
+                if int(values["-GR_SIM-"]) < 0 :
+                    l_sim = data.iloc[-1]['l_median']
+                    #kin.to_csv('_data.csv',index=True)
+                else:
+                    l_sim = values["-GR_SIM-"]
+
+                #data1 = kin.iloc[-1]['dataset'].copy()
+                sim_normals(curves, data0, (width, height), l_sim = l_sim, res = res, folder = values["-FOLDER-"])
+
+            else:
+                sg.popup("Cancel", f'Please load more curves')
+            
             
         
         elif event == "-FOLDER-":   # New folder has been chosen
