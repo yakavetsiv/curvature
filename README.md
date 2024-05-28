@@ -42,3 +42,13 @@ Estimation of the absolute growth of tumoroid (requires two or more shapes):
 4. Press "Save image" to save the top left panel (color mapping the shape with curvature values).
 5. Press "Save plot" to save all the generated layots of panels.
 6. "Clear last" or "Clear all" to remove the last/all shapes
+
+## Simulation of uniform growth
+Comparison of day0-shape with day21-shape and a simulated shape in the case of uniform growth (requires two shapes):
+1. Add multiple shapes assigning various days for each shape
+   Note: the selection of the day 0 and day21 shapes is suggested
+2. Change the default value of simulation growth
+   Note: if the value is negative, the program will calculate the median growth between the shapes as a simulation growth rate
+3. Press "Simulation growth
+   Note: the generated image is saved in the selected folder
+4. "Clear all" to remove the last/all shapes and proceed with the next shape
